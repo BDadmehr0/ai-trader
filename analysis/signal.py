@@ -28,6 +28,8 @@ class TimeframeAnalysis:
 
     volume_ratio: float
 
+    atr: float
+
 
 def analyze_timeframe(
     df,
@@ -74,62 +76,57 @@ def analyze_timeframe(
         latest["volume_ratio"]
     )
 
-    # =========================
-    # Price vs EMA20
-    # =========================
+    atr = float(
+        latest["atr"]
+    )
+
+    # Price > EMA20
 
     if price > ema20:
         score += 1
     else:
         score -= 1
 
-    # =========================
-    # EMA20 vs EMA50
-    # =========================
+    # EMA20 > EMA50
 
     if ema20 > ema50:
         score += 1
     else:
         score -= 1
 
-    # =========================
-    # EMA50 vs EMA200
-    # =========================
+    # EMA50 > EMA200
 
     if ema50 > ema200:
         score += 1
     else:
         score -= 1
 
-    # =========================
     # MACD
-    # =========================
 
     if macd > macd_signal:
         score += 1
     else:
         score -= 1
 
-    # =========================
     # RSI
-    # =========================
 
     if rsi > 50:
         score += 1
     else:
         score -= 1
 
-    # =========================
-    # Determine trend
-    # =========================
+    # Trend
 
     if score >= 3:
+
         trend = "BULLISH"
 
     elif score <= -3:
+
         trend = "BEARISH"
 
     else:
+
         trend = "NEUTRAL"
 
     return TimeframeAnalysis(
@@ -145,58 +142,83 @@ def analyze_timeframe(
         macd_signal=macd_signal,
         macd_histogram=macd_histogram,
         volume_ratio=volume_ratio,
+        atr=atr,
     )
 
 
 def generate_signal(
-    analysis_1h: TimeframeAnalysis,
-    analysis_4h: TimeframeAnalysis,
-) -> str:
+    analysis_15m,
+    analysis_1h,
+    analysis_4h,
+):
 
     score = 0
 
     # =========================
-    # 4H = Main Trend
+    # 4H
+    # Main Market Direction
     # =========================
 
     if analysis_4h.trend == "BULLISH":
-        score += 2
+
+        score += 3
 
     elif analysis_4h.trend == "BEARISH":
-        score -= 2
+
+        score -= 3
 
     # =========================
-    # 1H = Entry Direction
+    # 1H
+    # Setup Confirmation
     # =========================
 
     if analysis_1h.trend == "BULLISH":
-        score += 1
+
+        score += 2
 
     elif analysis_1h.trend == "BEARISH":
-        score -= 1
+
+        score -= 2
 
     # =========================
-    # 1H RSI
+    # 15M
+    # Entry Direction
     # =========================
 
-    if analysis_1h.rsi < 30:
+    if analysis_15m.trend == "BULLISH":
 
-        # Oversold
         score += 1
 
-    elif analysis_1h.rsi > 70:
+    elif analysis_15m.trend == "BEARISH":
 
-        # Overbought
         score -= 1
 
     # =========================
-    # Final Signal
+    # Final
     # =========================
 
-    if score >= 3:
-        return "LONG"
+    if score >= 5:
 
-    elif score <= -3:
-        return "SHORT"
+        signal = "LONG"
 
-    return "WAIT"
+    elif score <= -5:
+
+        signal = "SHORT"
+
+    else:
+
+        signal = "WAIT"
+
+    # =========================
+    # Confidence
+    # =========================
+
+    max_score = 6
+
+    confidence = int(
+        abs(score)
+        / max_score
+        * 100
+    )
+
+    return signal, confidence

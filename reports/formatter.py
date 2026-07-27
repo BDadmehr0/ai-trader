@@ -33,16 +33,22 @@ def get_signal_style(
 
 
 def print_analysis(
+    analysis_15m,
     analysis_1h,
     analysis_4h,
     signal,
+    confidence,
+    levels,
+    trade_setup,
 ):
 
     console.print()
 
     console.print(
         Panel(
-            "[bold cyan]BTC AI TRADER - VERSION 1[/bold cyan]",
+            "[bold cyan]"
+            "BTC AI TRADER - VERSION 2"
+            "[/bold cyan]",
             expand=False,
         )
     )
@@ -57,55 +63,32 @@ def print_analysis(
         title="Market Analysis"
     )
 
-    table.add_column(
+    columns = [
         "Timeframe",
-        justify="center",
-    )
-
-    table.add_column(
         "Trend",
-        justify="center",
-    )
-
-    table.add_column(
         "Score",
-        justify="center",
-    )
-
-    table.add_column(
         "Price",
-        justify="right",
-    )
-
-    table.add_column(
         "RSI",
-        justify="right",
-    )
-
-    table.add_column(
         "EMA20",
-        justify="right",
-    )
-
-    table.add_column(
         "EMA50",
-        justify="right",
-    )
-
-    table.add_column(
         "EMA200",
-        justify="right",
-    )
-
-    table.add_column(
         "Volume",
-        justify="right",
-    )
+    ]
 
-    for analysis in [
+    for column in columns:
+
+        table.add_column(
+            column,
+            justify="center",
+        )
+
+    analyses = [
+        analysis_15m,
         analysis_1h,
         analysis_4h,
-    ]:
+    ]
+
+    for analysis in analyses:
 
         table.add_row(
             analysis.timeframe,
@@ -139,20 +122,142 @@ def print_analysis(
     # Signal
     # =========================
 
-    signal_panel = Panel(
-        get_signal_style(signal),
-        title="Current Signal",
-        expand=False,
-    )
-
     console.print(
-        signal_panel
+        Panel(
+            (
+                f"Signal: "
+                f"{get_signal_style(signal)}\n"
+                f"Confidence: "
+                f"{confidence}%"
+            ),
+            title="Signal",
+            expand=False,
+        )
     )
 
     console.print()
 
     # =========================
-    # Explanation
+    # Market Levels
+    # =========================
+
+    levels_table = Table(
+        title="Market Levels"
+    )
+
+    levels_table.add_column(
+        "Level"
+    )
+
+    levels_table.add_column(
+        "Price",
+        justify="right",
+    )
+
+    levels_table.add_row(
+        "Support 1",
+        f"{levels.support_1:,.2f}",
+    )
+
+    levels_table.add_row(
+        "Support 2",
+        f"{levels.support_2:,.2f}",
+    )
+
+    levels_table.add_row(
+        "Resistance 1",
+        f"{levels.resistance_1:,.2f}",
+    )
+
+    levels_table.add_row(
+        "Resistance 2",
+        f"{levels.resistance_2:,.2f}",
+    )
+
+    console.print(
+        levels_table
+    )
+
+    console.print()
+
+    # =========================
+    # Trade Setup
+    # =========================
+
+    if signal != "WAIT":
+
+        trade_table = Table(
+            title="Trade Setup"
+        )
+
+        trade_table.add_column(
+            "Parameter"
+        )
+
+        trade_table.add_column(
+            "Value",
+            justify="right",
+        )
+
+        trade_table.add_row(
+            "Status",
+            trade_setup.status,
+        )
+
+        trade_table.add_row(
+            "Entry",
+            f"{trade_setup.entry:,.2f}",
+        )
+
+        trade_table.add_row(
+            "Stop Loss",
+            f"{trade_setup.stop_loss:,.2f}",
+        )
+
+        trade_table.add_row(
+            "Take Profit 1",
+            f"{trade_setup.take_profit_1:,.2f}",
+        )
+
+        trade_table.add_row(
+            "Take Profit 2",
+            f"{trade_setup.take_profit_2:,.2f}",
+        )
+
+        trade_table.add_row(
+            "Risk / Reward 1",
+            (
+                f"1:"
+                f"{trade_setup.risk_reward_1:.2f}"
+            ),
+        )
+
+        trade_table.add_row(
+            "Risk / Reward 2",
+            (
+                f"1:"
+                f"{trade_setup.risk_reward_2:.2f}"
+            ),
+        )
+
+        console.print(
+            trade_table
+        )
+
+    else:
+
+        console.print(
+            Panel(
+                "No valid trade setup.",
+                title="Trade Setup",
+                expand=False,
+            )
+        )
+
+    console.print()
+
+    # =========================
+    # Summary
     # =========================
 
     console.print(
@@ -170,6 +275,11 @@ def print_analysis(
     )
 
     console.print(
+        f"15M Trend: "
+        f"{get_trend_style(analysis_15m.trend)}"
+    )
+
+    console.print(
         f"4H RSI: "
         f"{analysis_4h.rsi:.2f}"
     )
@@ -180,20 +290,18 @@ def print_analysis(
     )
 
     console.print(
-        f"4H Volume: "
-        f"{analysis_4h.volume_ratio:.2f}x"
-    )
-
-    console.print(
-        f"1H Volume: "
-        f"{analysis_1h.volume_ratio:.2f}x"
+        f"15M RSI: "
+        f"{analysis_15m.rsi:.2f}"
     )
 
     console.print()
 
     console.print(
-        "[dim]This is a technical-analysis "
-        "signal, not a guaranteed prediction.[/dim]"
+        "[dim]"
+        "This system provides technical "
+        "analysis only and does not guarantee "
+        "future market movements."
+        "[/dim]"
     )
 
     console.print()

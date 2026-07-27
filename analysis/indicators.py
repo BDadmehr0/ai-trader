@@ -1,11 +1,19 @@
 import pandas as pd
 
 from ta.momentum import RSIIndicator
+
 from ta.trend import (
     EMAIndicator,
     MACD,
 )
-from ta.volume import OnBalanceVolumeIndicator
+
+from ta.volume import (
+    OnBalanceVolumeIndicator,
+)
+
+from ta.volatility import (
+    AverageTrueRange,
+)
 
 from config.settings import (
     EMA_FAST,
@@ -16,6 +24,7 @@ from config.settings import (
     MACD_SLOW,
     MACD_SIGNAL,
     VOLUME_MA_PERIOD,
+    ATR_PERIOD,
 )
 
 
@@ -100,10 +109,28 @@ def add_indicators(
         volume=df["volume"],
     )
 
-    df["obv"] = obv.on_balance_volume()
+    df["obv"] = (
+        obv.on_balance_volume()
+    )
 
-    # Remove rows where indicators
-    # are not calculated yet.
+    # =========================
+    # ATR
+    # =========================
+
+    atr = AverageTrueRange(
+        high=df["high"],
+        low=df["low"],
+        close=df["close"],
+        window=ATR_PERIOD,
+    )
+
+    df["atr"] = (
+        atr.average_true_range()
+    )
+
+    # =========================
+    # Clean
+    # =========================
 
     df = df.dropna()
 
