@@ -4,3 +4,4 @@ numpy
 ta
 rich
 python-dotenv
+matplotlib

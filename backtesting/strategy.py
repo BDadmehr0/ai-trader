@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class Signal:
+class MarketSignal:
 
     direction: str
 
@@ -10,96 +10,218 @@ class Signal:
 
     confidence: float
 
+    regime: str
 
-def calculate_signal(
-    row,
-) -> Signal:
+    reason: list
+
+
+def trend_score(row):
 
     score = 0
 
-    # =========================
-    # Price vs EMA20
-    # =========================
+    reasons = []
 
     if row["close"] > row["ema20"]:
 
         score += 1
 
+        reasons.append(
+            "Price above EMA20"
+        )
+
     else:
 
         score -= 1
 
-    # =========================
-    # EMA20 vs EMA50
-    # =========================
+        reasons.append(
+            "Price below EMA20"
+        )
 
     if row["ema20"] > row["ema50"]:
 
         score += 1
 
+        reasons.append(
+            "EMA20 above EMA50"
+        )
+
     else:
 
         score -= 1
 
-    # =========================
-    # EMA50 vs EMA200
-    # =========================
+        reasons.append(
+            "EMA20 below EMA50"
+        )
 
     if row["ema50"] > row["ema200"]:
 
         score += 1
 
+        reasons.append(
+            "EMA50 above EMA200"
+        )
+
     else:
 
         score -= 1
 
-    # =========================
-    # MACD
-    # =========================
+        reasons.append(
+            "EMA50 below EMA200"
+        )
 
     if row["macd"] > row["macd_signal"]:
 
         score += 1
 
+        reasons.append(
+            "MACD bullish"
+        )
+
     else:
 
         score -= 1
 
-    # =========================
-    # RSI
-    # =========================
+        reasons.append(
+            "MACD bearish"
+        )
 
     if row["rsi"] > 50:
 
         score += 1
 
+        reasons.append(
+            "RSI above 50"
+        )
+
     else:
 
         score -= 1
 
-    # =========================
-    # Volume Confirmation
-    # =========================
+        reasons.append(
+            "RSI below 50"
+        )
 
-    if row["volume_ratio"] > 1.0:
+    return score, reasons
 
-        if score > 0:
 
-            score += 1
+def get_market_regime(row):
 
-        elif score < 0:
+    score, reasons = trend_score(row)
 
-            score -= 1
+    if score >= 3:
 
-    # =========================
+        regime = "BULLISH"
+
+    elif score <= -3:
+
+        regime = "BEARISH"
+
+    else:
+
+        regime = "NEUTRAL"
+
+    return {
+        "regime": regime,
+        "score": score,
+        "reasons": reasons,
+    }
+
+
+def generate_mtf_signal(
+    row_4h,
+    row_1h,
+    row_15m,
+):
+
+    regime_data = get_market_regime(
+        row_4h
+    )
+
+    score_4h = (
+        regime_data["score"]
+    )
+
+    score_1h, reasons_1h = (
+        trend_score(row_1h)
+    )
+
+    score_15m, reasons_15m = (
+        trend_score(row_15m)
+    )
+
+    final_score = 0
+
+    reasons = []
+
+    # -------------------------
+    # 4H Main Trend
+    # -------------------------
+
+    if score_4h >= 3:
+
+        final_score += 3
+
+        reasons.append(
+            "4H bullish regime"
+        )
+
+    elif score_4h <= -3:
+
+        final_score -= 3
+
+        reasons.append(
+            "4H bearish regime"
+        )
+
+    # -------------------------
+    # 1H Setup
+    # -------------------------
+
+    if score_1h >= 3:
+
+        final_score += 2
+
+        reasons.append(
+            "1H confirms bullish setup"
+        )
+
+    elif score_1h <= -3:
+
+        final_score -= 2
+
+        reasons.append(
+            "1H confirms bearish setup"
+        )
+
+    # -------------------------
+    # 15M Entry
+    # -------------------------
+
+    if score_15m >= 3:
+
+        final_score += 1
+
+        reasons.append(
+            "15M bullish entry"
+        )
+
+    elif score_15m <= -3:
+
+        final_score -= 1
+
+        reasons.append(
+            "15M bearish entry"
+        )
+
+    # -------------------------
     # Direction
-    # =========================
+    # -------------------------
 
-    if score >= 4:
+    if final_score >= 5:
 
         direction = "LONG"
 
-    elif score <= -4:
+    elif final_score <= -5:
 
         direction = "SHORT"
 
@@ -108,13 +230,15 @@ def calculate_signal(
         direction = "WAIT"
 
     confidence = (
-        abs(score)
+        abs(final_score)
         / 6
         * 100
     )
 
-    return Signal(
+    return MarketSignal(
         direction=direction,
-        score=score,
+        score=final_score,
         confidence=confidence,
+        regime=regime_data["regime"],
+        reason=reasons,
     )

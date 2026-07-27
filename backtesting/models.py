@@ -1,13 +1,12 @@
 from dataclasses import dataclass
-from datetime import datetime
 
 
 @dataclass
 class Trade:
 
-    entry_time: datetime
+    entry_time: object
 
-    exit_time: datetime
+    exit_time: object
 
     direction: str
 
@@ -21,8 +20,22 @@ class Trade:
 
     position_size: float
 
-    pnl: float
+    leverage: float
 
-    pnl_percent: float
+    margin_used: float
+
+    entry_fee: float
+
+    exit_fee: float
+
+    funding_fee: float
+
+    slippage_cost: float
+
+    gross_pnl: float
+
+    net_pnl: float
+
+    return_on_margin: float
 
     exit_reason: str

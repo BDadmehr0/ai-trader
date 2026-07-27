@@ -1,17 +1,22 @@
-import pandas as pd
+import math
 
 from backtesting.models import Trade
 
 from backtesting.strategy import (
-    calculate_signal,
+    generate_mtf_signal,
 )
 
 from config.settings import (
-    INITIAL_BALANCE,
     RISK_PER_TRADE,
-    TAKE_PROFIT_RR,
     ATR_STOP_MULTIPLIER,
+    TAKE_PROFIT_RR,
     MAX_HOLDING_CANDLES,
+    LEVERAGE,
+    TAKER_FEE,
+    SLIPPAGE,
+    FUNDING_RATE,
+    FUNDING_INTERVAL_HOURS,
+    MAINTENANCE_MARGIN,
 )
 
 
@@ -19,7 +24,7 @@ class BacktestEngine:
 
     def __init__(
         self,
-        initial_balance=INITIAL_BALANCE,
+        initial_balance,
     ):
 
         self.initial_balance = (
@@ -36,12 +41,8 @@ class BacktestEngine:
 
     def run(
         self,
-        df: pd.DataFrame,
+        df,
     ):
-
-        df = df.reset_index(
-            drop=True
-        )
 
         position = None
 
@@ -54,19 +55,23 @@ class BacktestEngine:
 
             row = df.iloc[i]
 
-            previous_row = (
+            previous = (
                 df.iloc[i - 1]
             )
 
-            # =========================
-            # Existing Position
-            # =========================
+            # -------------------------
+            # Manage Existing Position
+            # -------------------------
 
-            if position is not None:
+            if position:
 
                 holding_candles += 1
 
-                result = (
+                position["holding_candles"] = (
+                    holding_candles
+                )
+
+                exit_result = (
                     self.check_exit(
                         position,
                         row,
@@ -74,12 +79,13 @@ class BacktestEngine:
                     )
                 )
 
-                if result is not None:
+                if exit_result:
 
                     trade = (
                         self.close_position(
                             position,
-                            result,
+                            row,
+                            exit_result,
                         )
                     )
 
@@ -91,30 +97,104 @@ class BacktestEngine:
 
                     holding_candles = 0
 
+                else:
+
                     self.equity_curve.append(
-                        self.balance
+                        self.mark_to_market(
+                            position,
+                            row,
+                        )
                     )
-
-                    continue
-
-                self.equity_curve.append(
-                    self.calculate_equity(
-                        position,
-                        row,
-                    )
-                )
 
                 continue
 
-            # =========================
-            # New Signal
-            # =========================
+            # -------------------------
+            # Signal
+            # -------------------------
 
-            signal = calculate_signal(
-                previous_row
+            signal = (
+                generate_mtf_signal(
+                    row_4h={
+                        "close": row[
+                            "close_4h"
+                        ],
+                        "ema20": row[
+                            "ema20_4h"
+                        ],
+                        "ema50": row[
+                            "ema50_4h"
+                        ],
+                        "ema200": row[
+                            "ema200_4h"
+                        ],
+                        "macd": row[
+                            "macd_4h"
+                        ],
+                        "macd_signal": row[
+                            "macd_signal_4h"
+                        ],
+                        "rsi": row[
+                            "rsi_4h"
+                        ],
+                    },
+
+                    row_1h={
+                        "close": row[
+                            "close_1h"
+                        ],
+                        "ema20": row[
+                            "ema20_1h"
+                        ],
+                        "ema50": row[
+                            "ema50_1h"
+                        ],
+                        "ema200": row[
+                            "ema200_1h"
+                        ],
+                        "macd": row[
+                            "macd_1h"
+                        ],
+                        "macd_signal": row[
+                            "macd_signal_1h"
+                        ],
+                        "rsi": row[
+                            "rsi_1h"
+                        ],
+                        "atr": row[
+                            "atr_1h"
+                        ],
+                    },
+
+                    row_15m={
+                        "close": row[
+                            "close"
+                        ],
+                        "ema20": row[
+                            "ema20"
+                        ],
+                        "ema50": row[
+                            "ema50"
+                        ],
+                        "ema200": row[
+                            "ema200"
+                        ],
+                        "macd": row[
+                            "macd"
+                        ],
+                        "macd_signal": row[
+                            "macd_signal"
+                        ],
+                        "rsi": row[
+                            "rsi"
+                        ],
+                    },
+                )
             )
 
-            if signal.direction == "WAIT":
+            if (
+                signal.direction
+                == "WAIT"
+            ):
 
                 self.equity_curve.append(
                     self.balance
@@ -122,9 +202,9 @@ class BacktestEngine:
 
                 continue
 
-            # =========================
-            # Open Position
-            # =========================
+            # -------------------------
+            # Open
+            # -------------------------
 
             position = (
                 self.open_position(
@@ -137,30 +217,6 @@ class BacktestEngine:
                 self.balance
             )
 
-        # =========================
-        # Close Open Position
-        # =========================
-
-        if position is not None:
-
-            last_row = df.iloc[-1]
-
-            trade = (
-                self.close_position(
-                    position,
-                    {
-                        "price": float(
-                            last_row["close"]
-                        ),
-                        "reason": "END_OF_DATA",
-                    },
-                )
-            )
-
-            self.trades.append(
-                trade
-            )
-
         return self.trades
 
     def open_position(
@@ -169,17 +225,28 @@ class BacktestEngine:
         direction,
     ):
 
-        entry_price = float(
-            row["open"]
+        raw_entry = float(
+            row["close"]
         )
+
+        # Slippage
+
+        if direction == "LONG":
+
+            entry_price = (
+                raw_entry
+                * (1 + SLIPPAGE)
+            )
+
+        else:
+
+            entry_price = (
+                raw_entry
+                * (1 - SLIPPAGE)
+            )
 
         atr = float(
             row["atr"]
-        )
-
-        risk_per_trade = (
-            self.balance
-            * RISK_PER_TRADE
         )
 
         stop_distance = (
@@ -187,16 +254,29 @@ class BacktestEngine:
             * ATR_STOP_MULTIPLIER
         )
 
-        if stop_distance <= 0:
-
-            stop_distance = (
-                entry_price
-                * 0.01
-            )
+        risk_amount = (
+            self.balance
+            * RISK_PER_TRADE
+        )
 
         position_size = (
-            risk_per_trade
+            risk_amount
             / stop_distance
+        )
+
+        notional = (
+            position_size
+            * entry_price
+        )
+
+        margin_used = (
+            notional
+            / LEVERAGE
+        )
+
+        entry_fee = (
+            notional
+            * TAKER_FEE
         )
 
         if direction == "LONG":
@@ -225,13 +305,27 @@ class BacktestEngine:
                 * TAKE_PROFIT_RR
             )
 
+        self.balance -= entry_fee
+
         return {
-            "entry_time": row["timestamp"],
+            "entry_time": row[
+                "timestamp"
+            ],
+
             "direction": direction,
+
             "entry_price": entry_price,
+
             "stop_loss": stop_loss,
+
             "take_profit": take_profit,
+
             "position_size": position_size,
+
+            "margin_used": margin_used,
+
+            "entry_fee": entry_fee,
+
             "holding_candles": 0,
         }
 
@@ -250,105 +344,68 @@ class BacktestEngine:
             row["low"]
         )
 
-        if (
+        direction = (
             position["direction"]
-            == "LONG"
-        ):
+        )
 
-            stop_hit = (
+        if direction == "LONG":
+
+            if (
                 low
                 <= position[
                     "stop_loss"
                 ]
-            )
+            ):
 
-            target_hit = (
+                return {
+                    "price": position[
+                        "stop_loss"
+                    ],
+                    "reason": "STOP_LOSS",
+                }
+
+            if (
                 high
                 >= position[
                     "take_profit"
                 ]
-            )
-
-            if stop_hit and target_hit:
-
-                return {
-                    "price": position[
-                        "stop_loss"
-                    ],
-                    "reason": (
-                        "STOP_LOSS"
-                    ),
-                }
-
-            if stop_hit:
-
-                return {
-                    "price": position[
-                        "stop_loss"
-                    ],
-                    "reason": (
-                        "STOP_LOSS"
-                    ),
-                }
-
-            if target_hit:
+            ):
 
                 return {
                     "price": position[
                         "take_profit"
                     ],
-                    "reason": (
-                        "TAKE_PROFIT"
-                    ),
+                    "reason": "TAKE_PROFIT",
                 }
 
         else:
 
-            stop_hit = (
+            if (
                 high
                 >= position[
                     "stop_loss"
                 ]
-            )
+            ):
 
-            target_hit = (
+                return {
+                    "price": position[
+                        "stop_loss"
+                    ],
+                    "reason": "STOP_LOSS",
+                }
+
+            if (
                 low
                 <= position[
                     "take_profit"
                 ]
-            )
-
-            if stop_hit and target_hit:
-
-                return {
-                    "price": position[
-                        "stop_loss"
-                    ],
-                    "reason": (
-                        "STOP_LOSS"
-                    ),
-                }
-
-            if stop_hit:
-
-                return {
-                    "price": position[
-                        "stop_loss"
-                    ],
-                    "reason": (
-                        "STOP_LOSS"
-                    ),
-                }
-
-            if target_hit:
+            ):
 
                 return {
                     "price": position[
                         "take_profit"
                     ],
-                    "reason": (
-                        "TAKE_PROFIT"
-                    ),
+                    "reason": "TAKE_PROFIT",
                 }
 
         if (
@@ -360,9 +417,7 @@ class BacktestEngine:
                 "price": float(
                     row["close"]
                 ),
-                "reason": (
-                    "TIME_EXIT"
-                ),
+                "reason": "TIME_EXIT",
             }
 
         return None
@@ -370,62 +425,119 @@ class BacktestEngine:
     def close_position(
         self,
         position,
+        row,
         result,
     ):
 
-        entry = (
-            position[
-                "entry_price"
-            ]
-        )
-
-        exit_price = (
+        raw_exit = float(
             result["price"]
         )
 
-        size = (
-            position[
+        direction = (
+            position["direction"]
+        )
+
+        if direction == "LONG":
+
+            exit_price = (
+                raw_exit
+                * (1 - SLIPPAGE)
+            )
+
+            gross_pnl = (
+                exit_price
+                - position[
+                    "entry_price"
+                ]
+            ) * position[
+                "position_size"
+            ]
+
+        else:
+
+            exit_price = (
+                raw_exit
+                * (1 + SLIPPAGE)
+            )
+
+            gross_pnl = (
+                position[
+                    "entry_price"
+                ]
+                - exit_price
+            ) * position[
+                "position_size"
+            ]
+
+        notional = (
+            exit_price
+            * position[
                 "position_size"
             ]
         )
 
-        if (
-            position["direction"]
-            == "LONG"
-        ):
-
-            pnl = (
-                exit_price
-                - entry
-            ) * size
-
-        else:
-
-            pnl = (
-                entry
-                - exit_price
-            ) * size
-
-        pnl_percent = (
-            pnl
-            / self.balance
-            * 100
+        exit_fee = (
+            notional
+            * TAKER_FEE
         )
 
-        self.balance += pnl
+        holding_hours = (
+            position[
+                "holding_candles"
+            ]
+            * 0.25
+        )
+
+        funding_intervals = (
+            math.floor(
+                holding_hours
+                / FUNDING_INTERVAL_HOURS
+            )
+        )
+
+        funding_fee = (
+            notional
+            * FUNDING_RATE
+            * funding_intervals
+        )
+
+        slippage_cost = (
+            abs(
+                raw_exit
+                - exit_price
+            )
+            * position[
+                "position_size"
+            ]
+        )
+
+        net_pnl = (
+            gross_pnl
+            - position[
+                "entry_fee"
+            ]
+            - exit_fee
+            - funding_fee
+        )
+
+        self.balance += (
+            net_pnl
+        )
 
         return Trade(
             entry_time=position[
                 "entry_time"
             ],
 
-            exit_time=None,
-
-            direction=position[
-                "direction"
+            exit_time=row[
+                "timestamp"
             ],
 
-            entry_price=entry,
+            direction=direction,
+
+            entry_price=position[
+                "entry_price"
+            ],
 
             exit_price=exit_price,
 
@@ -437,37 +549,51 @@ class BacktestEngine:
                 "take_profit"
             ],
 
-            position_size=size,
+            position_size=position[
+                "position_size"
+            ],
 
-            pnl=pnl,
+            leverage=LEVERAGE,
 
-            pnl_percent=pnl_percent,
+            margin_used=position[
+                "margin_used"
+            ],
+
+            entry_fee=position[
+                "entry_fee"
+            ],
+
+            exit_fee=exit_fee,
+
+            funding_fee=funding_fee,
+
+            slippage_cost=slippage_cost,
+
+            gross_pnl=gross_pnl,
+
+            net_pnl=net_pnl,
+
+            return_on_margin=(
+                net_pnl
+                / position[
+                    "margin_used"
+                ]
+                * 100
+            ),
 
             exit_reason=result[
                 "reason"
             ],
         )
 
-    def calculate_equity(
+    def mark_to_market(
         self,
         position,
         row,
     ):
 
-        current_price = float(
+        price = float(
             row["close"]
-        )
-
-        entry = (
-            position[
-                "entry_price"
-            ]
-        )
-
-        size = (
-            position[
-                "position_size"
-            ]
         )
 
         if (
@@ -476,16 +602,24 @@ class BacktestEngine:
         ):
 
             unrealized = (
-                current_price
-                - entry
-            ) * size
+                price
+                - position[
+                    "entry_price"
+                ]
+            ) * position[
+                "position_size"
+            ]
 
         else:
 
             unrealized = (
-                entry
-                - current_price
-            ) * size
+                position[
+                    "entry_price"
+                ]
+                - price
+            ) * position[
+                "position_size"
+            ]
 
         return (
             self.balance
