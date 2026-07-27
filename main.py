@@ -1,144 +1,119 @@
-from data.market_data import MarketData
+import sys
+
+from data.market_data import (
+    MarketData,
+)
 
 from analysis.indicators import (
     add_indicators,
 )
 
-from analysis.signal import (
-    analyze_timeframe,
-    generate_signal,
+from backtesting.engine import (
+    BacktestEngine,
 )
 
-from analysis.levels import (
-    find_market_levels,
+from backtesting.metrics import (
+    calculate_metrics,
 )
 
-from analysis.risk import (
-    create_trade_setup,
+from backtesting.export import (
+    export_trades,
 )
 
-from reports.formatter import (
-    print_analysis,
+from reports.backtest_report import (
+    print_backtest_report,
 )
 
 from config.settings import (
     SYMBOL,
-    TIMEFRAMES,
+    CANDLE_LIMIT,
 )
 
 
-def analyze_btc():
+def run_backtest():
 
     print(
-        "Fetching BTC market data..."
+        "Fetching historical BTC data..."
     )
 
     market = MarketData()
 
-    # =========================
-    # Fetch Market Data
-    # =========================
-
-    df_15m = market.get_ohlcv(
+    df = market.get_ohlcv(
         symbol=SYMBOL,
-        timeframe=TIMEFRAMES["15M"],
+        timeframe="1h",
+        limit=CANDLE_LIMIT,
     )
 
-    df_1h = market.get_ohlcv(
-        symbol=SYMBOL,
-        timeframe=TIMEFRAMES["1H"],
+    print(
+        f"Loaded {len(df)} candles."
     )
 
-    df_4h = market.get_ohlcv(
-        symbol=SYMBOL,
-        timeframe=TIMEFRAMES["4H"],
+    print(
+        "Calculating indicators..."
     )
 
-    # =========================
-    # Indicators
-    # =========================
-
-    df_15m = add_indicators(
-        df_15m
+    df = add_indicators(
+        df
     )
 
-    df_1h = add_indicators(
-        df_1h
+    print(
+        "Running backtest..."
     )
 
-    df_4h = add_indicators(
-        df_4h
+    engine = BacktestEngine()
+
+    trades = engine.run(
+        df
     )
 
-    # =========================
-    # Analyze
-    # =========================
-
-    analysis_15m = analyze_timeframe(
-        df_15m,
-        "15M",
+    metrics = calculate_metrics(
+        trades=trades,
+        equity_curve=(
+            engine.equity_curve
+        ),
+        initial_balance=(
+            engine.initial_balance
+        ),
     )
 
-    analysis_1h = analyze_timeframe(
-        df_1h,
-        "1H",
+    export_trades(
+        trades
     )
 
-    analysis_4h = analyze_timeframe(
-        df_4h,
-        "4H",
+    print_backtest_report(
+        metrics
     )
 
-    # =========================
-    # Signal
-    # =========================
 
-    signal, confidence = (
-        generate_signal(
-            analysis_15m,
-            analysis_1h,
-            analysis_4h,
+def main():
+
+    if len(sys.argv) < 2:
+
+        print(
+            "Usage:"
         )
-    )
 
-    # =========================
-    # Market Levels
-    # =========================
-
-    levels = find_market_levels(
-        df_1h
-    )
-
-    # =========================
-    # Trade Setup
-    # =========================
-
-    trade_setup = (
-        create_trade_setup(
-            signal=signal,
-            price=analysis_15m.price,
-            atr=analysis_15m.atr,
-            support=levels.support_1,
-            resistance=levels.resistance_1,
-            confidence=confidence,
+        print(
+            "python main.py backtest"
         )
+
+        return
+
+    command = (
+        sys.argv[1].lower()
     )
 
-    # =========================
-    # Report
-    # =========================
+    if command == "backtest":
 
-    print_analysis(
-        analysis_15m=analysis_15m,
-        analysis_1h=analysis_1h,
-        analysis_4h=analysis_4h,
-        signal=signal,
-        confidence=confidence,
-        levels=levels,
-        trade_setup=trade_setup,
-    )
+        run_backtest()
+
+    else:
+
+        print(
+            f"Unknown command: {command}"
+        )
 
 
 if __name__ == "__main__":
 
-    analyze_btc()
+    main()
