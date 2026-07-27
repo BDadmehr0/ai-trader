@@ -1,0 +1,2 @@
+entry_time,exit_time,direction,entry_price,exit_price,initial_stop,final_stop,take_profit,position_size,leverage,margin_used,entry_fee,exit_fee,funding_fee,slippage_cost,gross_pnl,net_pnl,return_on_margin,exit_reason,holding_candles
+2026-07-19 22:00:00+00:00,2026-07-19 23:00:00+00:00,LONG,64675.662546,64614.8573521167,64511.38603774493,64627.782908698435,65004.21556251014,0.6087297633860798,2.0,19685.00037923226,19.68500037923226,19.66649341358965,0.0,7.868170999633906,-37.01393128522677,-76.36542507804867,-0.3879371277971346,STOP_LOSS,4

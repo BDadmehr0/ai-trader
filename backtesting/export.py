@@ -3,10 +3,14 @@ import pandas as pd
 
 def export_trades(
     trades,
-    filename="backtest_trades.csv",
+    filename="trades.csv",
 ):
 
     if not trades:
+
+        print(
+            "No trades to export."
+        )
 
         return
 
@@ -14,53 +18,69 @@ def export_trades(
 
     for trade in trades:
 
-        rows.append(
-            {
-                "entry_time": (
-                    trade.entry_time
-                ),
+        rows.append({
 
-                "exit_time": (
-                    trade.exit_time
-                ),
+            "entry_time":
+                trade.entry_time,
 
-                "direction": (
-                    trade.direction
-                ),
+            "exit_time":
+                trade.exit_time,
 
-                "entry_price": (
-                    trade.entry_price
-                ),
+            "direction":
+                trade.direction,
 
-                "exit_price": (
-                    trade.exit_price
-                ),
+            "entry_price":
+                trade.entry_price,
 
-                "stop_loss": (
-                    trade.stop_loss
-                ),
+            "exit_price":
+                trade.exit_price,
 
-                "take_profit": (
-                    trade.take_profit
-                ),
+            "initial_stop":
+                trade.initial_stop,
 
-                "position_size": (
-                    trade.position_size
-                ),
+            "final_stop":
+                trade.final_stop,
 
-                "pnl": (
-                    trade.pnl
-                ),
+            "take_profit":
+                trade.take_profit,
 
-                "pnl_percent": (
-                    trade.pnl_percent
-                ),
+            "position_size":
+                trade.position_size,
 
-                "exit_reason": (
-                    trade.exit_reason
-                ),
-            }
-        )
+            "leverage":
+                trade.leverage,
+
+            "margin_used":
+                trade.margin_used,
+
+            "entry_fee":
+                trade.entry_fee,
+
+            "exit_fee":
+                trade.exit_fee,
+
+            "funding_fee":
+                trade.funding_fee,
+
+            "slippage_cost":
+                trade.slippage_cost,
+
+            "gross_pnl":
+                trade.gross_pnl,
+
+            "net_pnl":
+                trade.net_pnl,
+
+            "return_on_margin":
+                trade.return_on_margin,
+
+            "exit_reason":
+                trade.exit_reason,
+
+            "holding_candles":
+                trade.holding_candles,
+
+        })
 
     df = pd.DataFrame(
         rows

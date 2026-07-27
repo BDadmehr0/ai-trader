@@ -24,29 +24,25 @@ class MarketData:
                 "https": proxy_url,
             }
 
-        self.exchange = ccxt.binance(exchange_config)
+        self.exchange = ccxt.binance(
+            exchange_config
+        )
 
     def get_ohlcv(
         self,
-        symbol: str,
-        timeframe: str,
-        limit: int = 1000,
-    ) -> pd.DataFrame:
+        symbol,
+        timeframe,
+        limit=1000,
+    ):
 
-        candles = self.exchange.fetch_ohlcv(
-            symbol=symbol,
+        data = self.exchange.fetch_ohlcv(
+            symbol,
             timeframe=timeframe,
             limit=limit,
         )
 
-        if not candles:
-            raise RuntimeError(
-                f"No market data received for "
-                f"{symbol} {timeframe}"
-            )
-
         df = pd.DataFrame(
-            candles,
+            data,
             columns=[
                 "timestamp",
                 "open",
@@ -77,15 +73,5 @@ class MarketData:
                 df[column],
                 errors="coerce",
             )
-
-        df = (
-            df
-            .dropna()
-            .drop_duplicates(
-                subset=["timestamp"]
-            )
-            .sort_values("timestamp")
-            .reset_index(drop=True)
-        )
 
         return df

@@ -14,7 +14,9 @@ class Trade:
 
     exit_price: float
 
-    stop_loss: float
+    initial_stop: float
+
+    final_stop: float
 
     take_profit: float
 
@@ -39,3 +41,5 @@ class Trade:
     return_on_margin: float
 
     exit_reason: str
+
+    holding_candles: int

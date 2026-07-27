@@ -1,20 +1,5 @@
 import pandas as pd
 
-from ta.momentum import RSIIndicator
-
-from ta.trend import (
-    EMAIndicator,
-    MACD,
-)
-
-from ta.volume import (
-    OnBalanceVolumeIndicator,
-)
-
-from ta.volatility import (
-    AverageTrueRange,
-)
-
 from config.settings import (
     EMA_FAST,
     EMA_MID,
@@ -23,14 +8,12 @@ from config.settings import (
     MACD_FAST,
     MACD_SLOW,
     MACD_SIGNAL,
-    VOLUME_MA_PERIOD,
     ATR_PERIOD,
+    VOLUME_MA_PERIOD,
 )
 
 
-def add_indicators(
-    df: pd.DataFrame,
-) -> pd.DataFrame:
+def add_indicators(df):
 
     df = df.copy()
 
@@ -38,100 +21,180 @@ def add_indicators(
     # EMA
     # =========================
 
-    df["ema20"] = EMAIndicator(
-        close=df["close"],
-        window=EMA_FAST,
-    ).ema_indicator()
+    df["ema20"] = (
+        df["close"]
+        .ewm(
+            span=EMA_FAST,
+            adjust=False,
+        )
+        .mean()
+    )
 
-    df["ema50"] = EMAIndicator(
-        close=df["close"],
-        window=EMA_MID,
-    ).ema_indicator()
+    df["ema50"] = (
+        df["close"]
+        .ewm(
+            span=EMA_MID,
+            adjust=False,
+        )
+        .mean()
+    )
 
-    df["ema200"] = EMAIndicator(
-        close=df["close"],
-        window=EMA_SLOW,
-    ).ema_indicator()
+    df["ema200"] = (
+        df["close"]
+        .ewm(
+            span=EMA_SLOW,
+            adjust=False,
+        )
+        .mean()
+    )
 
     # =========================
     # RSI
     # =========================
 
-    rsi = RSIIndicator(
-        close=df["close"],
-        window=RSI_PERIOD,
+    delta = df["close"].diff()
+
+    gain = delta.clip(
+        lower=0
     )
 
-    df["rsi"] = rsi.rsi()
+    loss = -delta.clip(
+        upper=0
+    )
+
+    avg_gain = (
+        gain
+        .ewm(
+            alpha=1 / RSI_PERIOD,
+            min_periods=RSI_PERIOD,
+            adjust=False,
+        )
+        .mean()
+    )
+
+    avg_loss = (
+        loss
+        .ewm(
+            alpha=1 / RSI_PERIOD,
+            min_periods=RSI_PERIOD,
+            adjust=False,
+        )
+        .mean()
+    )
+
+    rs = (
+        avg_gain
+        / avg_loss.replace(
+            0,
+            float("nan"),
+        )
+    )
+
+    df["rsi"] = (
+        100
+        - (
+            100
+            / (1 + rs)
+        )
+    )
 
     # =========================
     # MACD
     # =========================
 
-    macd = MACD(
-        close=df["close"],
-        window_fast=MACD_FAST,
-        window_slow=MACD_SLOW,
-        window_sign=MACD_SIGNAL,
-    )
-
-    df["macd"] = macd.macd()
-
-    df["macd_signal"] = (
-        macd.macd_signal()
-    )
-
-    df["macd_histogram"] = (
-        macd.macd_diff()
-    )
-
-    # =========================
-    # Volume
-    # =========================
-
-    df["volume_ma"] = (
-        df["volume"]
-        .rolling(VOLUME_MA_PERIOD)
+    ema_fast = (
+        df["close"]
+        .ewm(
+            span=MACD_FAST,
+            adjust=False,
+        )
         .mean()
     )
 
-    df["volume_ratio"] = (
-        df["volume"]
-        / df["volume_ma"]
+    ema_slow = (
+        df["close"]
+        .ewm(
+            span=MACD_SLOW,
+            adjust=False,
+        )
+        .mean()
     )
 
-    # =========================
-    # OBV
-    # =========================
-
-    obv = OnBalanceVolumeIndicator(
-        close=df["close"],
-        volume=df["volume"],
+    df["macd"] = (
+        ema_fast
+        - ema_slow
     )
 
-    df["obv"] = (
-        obv.on_balance_volume()
+    df["macd_signal"] = (
+        df["macd"]
+        .ewm(
+            span=MACD_SIGNAL,
+            adjust=False,
+        )
+        .mean()
+    )
+
+    df["macd_hist"] = (
+        df["macd"]
+        - df["macd_signal"]
     )
 
     # =========================
     # ATR
     # =========================
 
-    atr = AverageTrueRange(
-        high=df["high"],
-        low=df["low"],
-        close=df["close"],
-        window=ATR_PERIOD,
+    previous_close = (
+        df["close"].shift(1)
     )
+
+    tr1 = (
+        df["high"]
+        - df["low"]
+    )
+
+    tr2 = (
+        df["high"]
+        - previous_close
+    ).abs()
+
+    tr3 = (
+        df["low"]
+        - previous_close
+    ).abs()
+
+    true_range = pd.concat(
+        [
+            tr1,
+            tr2,
+            tr3,
+        ],
+        axis=1,
+    ).max(axis=1)
 
     df["atr"] = (
-        atr.average_true_range()
+        true_range
+        .ewm(
+            alpha=1 / ATR_PERIOD,
+            adjust=False,
+        )
+        .mean()
     )
 
     # =========================
-    # Clean
+    # Volume Ratio
     # =========================
 
-    df = df.dropna()
+    volume_ma = (
+        df["volume"]
+        .rolling(
+            VOLUME_MA_PERIOD
+        )
+        .mean()
+    )
+
+    df["volume_ratio"] = (
+        df["volume"]
+        / volume_ma
+    )
 
     return df

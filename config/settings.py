@@ -8,6 +8,11 @@ TIMEFRAMES = {
 
 CANDLE_LIMIT = 1000
 
+
+# =========================
+# Indicators
+# =========================
+
 EMA_FAST = 20
 EMA_MID = 50
 EMA_SLOW = 200
@@ -18,50 +23,101 @@ MACD_FAST = 12
 MACD_SLOW = 26
 MACD_SIGNAL = 9
 
-VOLUME_MA_PERIOD = 20
-
 ATR_PERIOD = 14
 
-# -------------------------
-# Risk Management
-# -------------------------
+VOLUME_MA_PERIOD = 20
+
+
+# =========================
+# Account
+# =========================
 
 INITIAL_BALANCE = 10_000.0
 
+
+# =========================
+# Risk
+# =========================
+
 RISK_PER_TRADE = 0.01
+
+MAX_OPEN_POSITIONS = 1
+
+COOLDOWN_CANDLES = 8
+
+
+# =========================
+# Stop / Target
+# =========================
 
 ATR_STOP_MULTIPLIER = 1.5
 
-TAKE_PROFIT_RR = 2.0
+ATR_TP_MULTIPLIER = 3.0
 
-MAX_HOLDING_CANDLES = 48
 
-# -------------------------
-# Futures Simulation
-# -------------------------
+# =========================
+# Break Even
+# =========================
+
+ENABLE_BREAK_EVEN = True
+
+BREAK_EVEN_R = 1.0
+
+BREAK_EVEN_OFFSET = 0.0005
+
+
+# =========================
+# Trailing Stop
+# =========================
+
+ENABLE_TRAILING_STOP = True
+
+TRAILING_ATR_MULTIPLIER = 1.5
+
+
+# =========================
+# Position
+# =========================
 
 LEVERAGE = 2.0
 
-MAKER_FEE = 0.0002
+
+# =========================
+# Fees
+# =========================
 
 TAKER_FEE = 0.0005
 
 SLIPPAGE = 0.0002
 
+
+# =========================
+# Funding
+# =========================
+
 FUNDING_RATE = 0.0001
 
 FUNDING_INTERVAL_HOURS = 8
 
-# Approximate maintenance margin
+
+# =========================
+# Liquidation
+# =========================
 
 MAINTENANCE_MARGIN = 0.005
 
-# -------------------------
+
+# =========================
+# Strategy
+# =========================
+
+PULLBACK_DISTANCE = 0.015
+
+MIN_VOLUME_RATIO = 1.1
+
+
+# =========================
 # Backtest
-# -------------------------
+# =========================
 
-STARTING_CASH = INITIAL_BALANCE
-
-ALLOW_LONG = True
-
-ALLOW_SHORT = True
+MAX_HOLDING_CANDLES = 96
