@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}بک‌تست — AI BTC Trader{% endblock %}
+
+{% block content %}
+<div class="status-line">
+  <span id="dataMode">
+    {% if live %}
+      <span class="badge live">داده زنده</span>
+    {% else %}
+      <span class="badge demo">داده نمایشی (آفلاین)</span>
+    {% endif %}
+  </span>
+</div>
+
+<section class="card">
+  <h2>نتیجه بک‌تست</h2>
+  {% if metrics %}
+  <div class="metric-grid">
+    <div class="metric"><div class="m-label">تعداد معاملات</div><div class="m-val">{{ metrics.total_trades }}</div></div>
+    <div class="metric"><div class="m-label">بردها</div><div class="m-val win">{{ metrics.wins }}</div></div>
+    <div class="metric"><div class="m-label">باخت‌ها</div><div class="m-val loss">{{ metrics.losses }}</div></div>
+    <div class="metric"><div class="m-label">نرخ برد</div><div class="m-val">{{ "%.2f"|format(metrics.win_rate) }}%</div></div>
+    <div class="metric"><div class="m-label">فاکتور سود</div><div class="m-val">{{ "%.2f"|format(metrics.profit_factor) }}</div></div>
+    <div class="metric"><div class="m-label">بازده کل</div><div class="m-val">{{ "%.2f"|format(metrics.total_return) }}%</div></div>
+    <div class="metric"><div class="m-label">حداکثر افت</div><div class="m-val loss">{{ "%.2f"|format(metrics.max_drawdown) }}%</div></div>
+    <div class="metric"><div class="m-label">موجودی نهایی</div><div class="m-val">{{ "${:,.0f}".format(metrics.final_balance) }}</div></div>
+  </div>
+  {% else %}
+    <p class="muted">هیچ معامله‌ای یافت نشد.</p>
+  {% endif %}
+</section>
+
+{% if trades %}
+<section class="card">
+  <h2>معاملات ({{ trades|length }})</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>جهت</th><th>ورود</th><th>خروج</th><th>قیمت ورود</th>
+        <th>قیمت خروج</th><th>سود/ضرر</th><th>دلیل خروج</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in trades[:100] %}
+      <tr>
+        <td>
+          <span class="trend trend-{{ 'bullish' if t.direction == 'LONG' else 'bearish' }}">
+            {{ 'خرید' if t.direction == 'LONG' else 'فروش' }}
+          </span>
+        </td>
+        <td>{{ t.entry_time }}</td>
+        <td>{{ t.exit_time }}</td>
+        <td>{{ "{:,.0f}".format(t.entry_price) }}</td>
+        <td>{{ "{:,.0f}".format(t.exit_price) }}</td>
+        <td class="{{ 'win' if t.net_pnl >= 0 else 'loss' }}">{{ "%+.2f"|format(t.net_pnl) }}</td>
+        <td>{{ t.exit_reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if trades|length > 100 %}
+    <p class="muted">نمایش ۱۰۰ مورد از {{ trades|length }} معامله.</p>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

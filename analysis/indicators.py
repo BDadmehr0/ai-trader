@@ -134,7 +134,7 @@ def add_indicators(df):
         .mean()
     )
 
-    df["macd_hist"] = (
+    df["macd_histogram"] = (
         df["macd"]
         - df["macd_signal"]
     )
