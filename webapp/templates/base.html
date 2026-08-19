@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AI BTC Trader{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">₿</span>
+      <span>AI BTC Trader</span>
+      <span class="pair">BTC/USDT</span>
+    </div>
+    <nav class="nav">
+      <a href="/" class="{{ 'active' if request.path == '/' else '' }}">سیگنال لحظه‌ای</a>
+      <a href="/backtest" class="{{ 'active' if request.path == '/backtest' else '' }}">بک‌تست</a>
+    </nav>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">
+    این سیستم فقط تحلیل تکنیکال ارائه می‌دهد و تضمین سوددهی ندارد.
+  </footer>
+</body>
+</html>

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}سیگنال لحظه‌ای — AI BTC Trader{% endblock %}
+
+{% block content %}
+<div class="status-line" id="statusLine">
+  <span id="dataMode">
+    {% if report.live %}
+      <span class="badge live">داده زنده</span>
+    {% else %}
+      <span class="badge demo">داده نمایشی (آفلاین)</span>
+    {% endif %}
+  </span>
+  <span id="updatedAt">آخرین به‌روزرسانی: {{ report.updated_at }}</span>
+</div>
+
+<!-- Main verdict card -->
+<section class="verdict-card verdict-{{ report.verdict|lower }}" id="verdictCard">
+  <div class="verdict-head">
+    <div>
+      <div class="verdict-label">پیشنهاد معاملاتی</div>
+      <div class="verdict" id="verdictText">{{ report.verdict }}</div>
+      <div class="verdict-fa" id="verdictFa">
+        {% if report.verdict == "BUY" %}خرید{% elif report.verdict == "SELL" %}فروش{% else %}صبر / بدون معامله{% endif %}
+      </div>
+    </div>
+    <div class="price-block">
+      <div class="price" id="priceText">{{ "{:,.0f}".format(report.price) }}</div>
+      <div class="pair-small">BTC/USDT</div>
+      <div class="change" id="changeText">
+        {{ "%+.2f"|format(report.change_24h_pct) }}% (۲۴ ساعت)
+      </div>
+    </div>
+  </div>
+
+  <div class="confidence">
+    <div class="confidence-label">اطمینان سیگنال</div>
+    <div class="confidence-bar">
+      <div class="confidence-fill" style="width: {{ report.confidence }}%"></div>
+    </div>
+    <div class="confidence-num" id="confText">{{ report.confidence }}%</div>
+  </div>
+
+  <div class="explanation" id="explanationText">{{ report.explanation }}</div>
+</section>
+
+<div class="grid-2">
+  <!-- Simple reasons -->
+  <section class="card">
+    <h2>توضیح ساده</h2>
+    <ul class="reasons" id="reasonsList">
+      {% for r in report.reasons %}
+        <li>{{ r }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <!-- Trade setup -->
+  <section class="card">
+    <h2>سطوح معاملاتی</h2>
+    {% if report.signal != "WAIT" %}
+    <table class="setup-table">
+      <tr><td>وضعیت</td><td id="setupStatus">{{ report.setup.status }}</td></tr>
+      <tr><td>ورود (Entry)</td><td id="setupEntry">{{ "{:,.0f}".format(report.setup.entry) }}</td></tr>
+      <tr><td>حد ضرر (Stop Loss)</td><td class="sl" id="setupSl">{{ "{:,.0f}".format(report.setup.stop_loss) }}</td></tr>
+      <tr><td>هدف اول (TP1)</td><td class="tp" id="setupTp1">{{ "{:,.0f}".format(report.setup.take_profit_1) }}</td></tr>
+      <tr><td>هدف دوم (TP2)</td><td class="tp" id="setupTp2">{{ "{:,.0f}".format(report.setup.take_profit_2) }}</td></tr>
+      <tr><td>نسبت ریسک/بازده TP1</td><td id="setupRr">1:{{ "%.1f"|format(report.setup.risk_reward_1) }}</td></tr>
+    </table>
+    {% else %}
+      <p class="muted">هیچ معامله‌ای پیشنهاد نمی‌شود. منتظر سیگنال بمانید.</p>
+    {% endif %}
+  </section>
+</div>
+
+<div class="grid-2">
+  <!-- Timeframes -->
+  <section class="card">
+    <h2>تحلیل چارچوب‌های زمانی</h2>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>بازه</th><th>روند</th><th>نمره</th><th>RSI</th>
+          <th>EMA20</th><th>EMA50</th><th>MACD</th><th>حجم</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tf, d in report.timeframes.items() %}
+        <tr>
+          <td>{{ tf }}</td>
+          <td>
+            <span class="trend trend-{{ d.trend|lower }}">{{ d.trend_fa }}</span>
+          </td>
+          <td>{{ d.score }}</td>
+          <td>{{ "%.1f"|format(d.rsi) }}</td>
+          <td>{{ "{:,.0f}".format(d.ema20) }}</td>
+          <td>{{ "{:,.0f}".format(d.ema50) }}</td>
+          <td>{{ "%+.2f"|format(d.macd_histogram) }}</td>
+          <td>{{ "%.2f"|format(d.volume_ratio) }}x</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Support / resistance -->
+  <section class="card">
+    <h2>حمایت و مقاومت</h2>
+    <table class="data-table">
+      <tbody>
+        <tr><td>مقاومت ۲</td><td class="res">{{ "{:,.0f}".format(report.levels.resistance_2) }}</td></tr>
+        <tr><td>مقاومت ۱</td><td class="res">{{ "{:,.0f}".format(report.levels.resistance_1) }}</td></tr>
+        <tr><td>قیمت فعلی</td><td class="now">{{ "{:,.0f}".format(report.price) }}</td></tr>
+        <tr><td>حمایت ۱</td><td class="sup">{{ "{:,.0f}".format(report.levels.support_1) }}</td></tr>
+        <tr><td>حمایت ۲</td><td class="sup">{{ "{:,.0f}".format(report.levels.support_2) }}</td></tr>
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}
+
+{% block head %}
+<meta http-equiv="refresh" content="60">
+{% endblock %}

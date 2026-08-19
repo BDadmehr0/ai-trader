@@ -5,3 +5,4 @@ ta
 rich
 python-dotenv
 matplotlib
+flask
