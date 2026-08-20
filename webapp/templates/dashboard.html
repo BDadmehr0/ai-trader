@@ -25,7 +25,7 @@
     </div>
     <div class="price-block">
       <div class="price" id="priceText">{{ "{:,.0f}".format(report.price) }}</div>
-      <div class="pair-small">BTC/USDT</div>
+      <div class="pair-small">{{ symbol }}</div>
       <div class="change" id="changeText">
         {{ "%+.2f"|format(report.change_24h_pct) }}% (۲۴ ساعت)
       </div>
@@ -41,6 +41,20 @@
   </div>
 
   <div class="explanation" id="explanationText">{{ report.explanation }}</div>
+</section>
+
+<!-- Price chart -->
+<section class="card chart-card">
+  <div class="chart-head">
+    <h2>نمودار قیمت</h2>
+    <div class="tf-switch">
+      <a href="?symbol={{ symbol }}&tf=15m" class="{{ 'active' if timeframe == '15m' else '' }}">۱۵ دقیقه</a>
+      <a href="?symbol={{ symbol }}&tf=1h" class="{{ 'active' if timeframe == '1h' else '' }}">۱ ساعت</a>
+      <a href="?symbol={{ symbol }}&tf=4h" class="{{ 'active' if timeframe == '4h' else '' }}">۴ ساعت</a>
+    </div>
+  </div>
+  <div id="priceChart"></div>
+  <div id="chartLegend" class="chart-legend"></div>
 </section>
 
 <div class="grid-2">
@@ -120,4 +134,10 @@
 
 {% block head %}
 <meta http-equiv="refresh" content="60">
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>window.AI_TRADER_CHART = {{ chart_data | tojson }};</script>
+<script src="{{ url_for('static', filename='chart.js') }}"></script>
 {% endblock %}

@@ -6,12 +6,13 @@
   const COINS = window.AI_TRADER_COINS || [];
 
   const input = document.getElementById("coinInput");
+  const dropdown = document.getElementById("coinDropdown");
   const list = document.getElementById("coinList");
   const clearBtn = document.getElementById("coinClear");
   const popularHead = document.getElementById("popularHead");
   const search = document.getElementById("coinSearch");
 
-  if (!input || !list) return;
+  if (!input || !dropdown || !list || !search) return;
 
   let activeIndex = -1;
 
@@ -44,12 +45,12 @@
   }
 
   function open() {
-    list.hidden = false;
+    dropdown.hidden = false;
     input.focus();
   }
 
   function close() {
-    list.hidden = true;
+    dropdown.hidden = true;
     activeIndex = -1;
   }
 
@@ -98,13 +99,12 @@
     if (!q) {
       render(all.slice(0, 12));
       popularHead.textContent = "پرمعامله‌ترین";
-      popularHead.hidden = false;
-      return;
+    } else {
+      popularHead.textContent = "نتایج جستجو";
+      const matches = all.filter((c) => c.startsWith(q)).slice(0, 12);
+      render(matches);
     }
-    popularHead.textContent = "نتایج جستجو";
     popularHead.hidden = false;
-    const matches = all.filter((c) => c.startsWith(q)).slice(0, 12);
-    render(matches);
   }
 
   input.addEventListener("focus", () => {
@@ -139,17 +139,19 @@
     }
   });
 
-  clearBtn.addEventListener("click", () => {
-    input.value = "";
-    activeIndex = -1;
-    refresh();
-    input.focus();
-  });
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      activeIndex = -1;
+      refresh();
+      input.focus();
+    });
+  }
 
   document.addEventListener("click", (e) => {
     if (!search.contains(e.target)) close();
   });
 
-  // Show a hint hint by default.
+  // Show a hint by default.
   activeIndex = -1;
 })();

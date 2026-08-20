@@ -21,7 +21,9 @@ class MarketData:
     testable offline.
     """
 
-    def __init__(self, exchange_id="binance"):
+    def __init__(self, exchange_id=None):
+        exchange_id = exchange_id or os.getenv("EXCHANGE_ID", "binance")
+
         exchange_config = {
             "enableRateLimit": True,
             "timeout": 15000,
