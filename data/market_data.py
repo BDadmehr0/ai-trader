@@ -36,16 +36,11 @@ class MarketData:
             }
 
         self.exchange_id = exchange_id
-
         self.exchange = getattr(ccxt, exchange_id)(exchange_config)
 
         self._live = True
         self._last_error = None
         self._fallback_logged = False
-
-    # ===========================================================
-    # Data access
-    # ===========================================================
 
     def get_ohlcv(self, symbol, timeframe, limit=1000):
         """Return a clean OHLCV DataFrame (live or demo)."""
@@ -53,22 +48,27 @@ class MarketData:
             df = self._fetch_live(symbol, timeframe, limit)
             self._live = True
             return df
+
         except Exception as exc:  # noqa: BLE001
             self._live = False
             self._last_error = str(exc)
+
             if not self._fallback_logged:
                 self._fallback_logged = True
+
                 logger.warning(
                     "Live data unavailable (%s). Falling back to demo "
                     "data — results are NOT real market prices.",
                     exc,
                 )
-            return load_demo(timeframe)
+
+            return load_demo(timeframe, symbol=symbol)
 
     def get_ticker(self, symbol):
         """Return the latest price / 24h change or None when offline."""
         try:
             ticker = self.exchange.fetch_ticker(symbol)
+
             return {
                 "last": ticker.get("last"),
                 "change_pct": ticker.get("percentage"),
@@ -76,10 +76,14 @@ class MarketData:
                 "low": ticker.get("low"),
                 "base_volume": ticker.get("baseVolume"),
             }
+
         except Exception as exc:  # noqa: BLE001
             self._last_error = str(exc)
+
             if not self._fallback_logged:
+                self._fallback_logged = True
                 logger.warning("Ticker fetch failed: %s", exc)
+
             return None
 
     @property
@@ -89,10 +93,6 @@ class MarketData:
     @property
     def last_error(self):
         return self._last_error
-
-    # ===========================================================
-    # Internals
-    # ===========================================================
 
     def _fetch_live(self, symbol, timeframe, limit):
         data = self.exchange.fetch_ohlcv(
@@ -128,6 +128,9 @@ class MarketData:
         ]
 
         for column in numeric_columns:
-            df[column] = pd.to_numeric(df[column], errors="coerce")
+            df[column] = pd.to_numeric(
+                df[column],
+                errors="coerce",
+            )
 
         return df
