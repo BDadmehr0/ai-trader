@@ -228,7 +228,7 @@ def _serialize_analysis(analysis):
 
 def _build_explanation(verdict, setup):
     if verdict == "BUY":
-        return f"Buy (LONG) signal. Entry at {setup.entry:,.0f}, Stop Loss {setup.stop_s:,.0f}, Target {setup.take_profit_1:,.0f}."
+        return f"Buy (LONG) signal. Entry at {setup.entry:,.0f}, Stop Loss {setup.stop_loss:,.0f}, Target {setup.take_profit_1:,.0f}."
     if verdict == "SELL":
         return f"Sell (SHORT) signal. Entry at {setup.entry:,.0f}, Stop Loss {setup.stop_loss:,.0f}, Target {setup.take_profit_1:,.0f}."
     return "Market conditions are unclear. Waiting for clearer signal."
