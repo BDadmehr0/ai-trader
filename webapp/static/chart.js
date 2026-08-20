@@ -86,8 +86,8 @@
   // =========================================================
   // Trade setup price lines
   // =========================================================
-  const isLong = C.setup.signal === "LONG";
-  const isShort = C.setup.signal === "SHORT";
+  const isLong = C.signal === "LONG";
+  const isShort = C.signal === "SHORT";
   const legend = [];
 
   const hasTrade = isLong || isShort;

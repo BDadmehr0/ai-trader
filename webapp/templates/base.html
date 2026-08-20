@@ -12,7 +12,22 @@
     <div class="brand">
       <span class="logo">₿</span>
       <span>AI BTC Trader</span>
-      <span class="pair">BTC/USDT</span>
+      <span class="pair">{{ symbol|default(default_symbol) }}</span>
+    </div>
+    <div class="coin-search" id="coinSearch">
+      <input
+        class="coin-input"
+        id="coinInput"
+        type="text"
+        placeholder="جستجوی رمزارز…"
+        autocomplete="off"
+        spellcheck="false"
+      >
+      <button class="coin-clear" id="coinClear" type="button" aria-label="پاک کردن" title="پاک کردن">×</button>
+      <div class="coin-dropdown" id="coinDropdown" hidden>
+        <div class="coin-list-head" id="popularHead">پرمعامله‌ترین</div>
+        <ul class="coin-list" id="coinList"></ul>
+      </div>
     </div>
     <nav class="nav">
       <a href="/" class="{{ 'active' if request.path == '/' else '' }}">سیگنال لحظه‌ای</a>
@@ -25,5 +40,8 @@
   <footer class="footer">
     این سیستم فقط تحلیل تکنیکال ارائه می‌دهد و تضمین سوددهی ندارد.
   </footer>
+  <script>window.AI_TRADER_COINS = {{ coins | tojson }};</script>
+  <script src="{{ url_for('static', filename='coinswitcher.js') }}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>
