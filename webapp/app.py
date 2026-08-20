@@ -1,12 +1,5 @@
 """
-Flask web panel for the AI BTC Trader.
-
-Routes
-------
-GET /                 -> server-rendered dashboard (live signal + price chart)
-GET /api/signal       -> JSON signal report (used by the page to auto-refresh)
-GET /api/candles      -> JSON OHLCV candles for the chart
-GET /backtest         -> run a backtest and show the results table
+Flask web panel - Professional AI Trading Dashboard.
 """
 
 from flask import Flask, jsonify, render_template, request
@@ -14,27 +7,19 @@ from flask import Flask, jsonify, render_template, request
 from analysis.live import build_signal_report
 from data.market_data import MarketData
 from config.settings import (
-    SYMBOL,
-    QUOTE,
-    SUPPORTED_COINS,
-    CHART_CANDLE_LIMIT,
+    SYMBOL, QUOTE, SUPPORTED_COINS, CHART_CANDLE_LIMIT, CANDLE_LIMIT,
 )
 
-# Timeframes the price chart supports.
 CHART_TIMEFRAMES = ("15m", "1h", "4h")
 
 
 def normalize_symbol(value):
-    """Turn user input like ``ETH`` or ``eth/usdt`` into ``ETH/USDT``."""
     raw = (value or "").strip().upper()
-
     if not raw:
         return SYMBOL
-
     base = raw.replace("_", "/").replace("-", "/").split("/")[0].strip()
     if not base:
         return SYMBOL
-
     return f"{base}/{QUOTE}"
 
 
@@ -43,23 +28,18 @@ def _valid_timeframe(value):
 
 
 def _chart_candles(market, symbol, timeframe):
-    """Return the latest OHLCV candles for the chart as plain dicts."""
     df = market.get_ohlcv(symbol, timeframe, CHART_CANDLE_LIMIT)
     df = df.tail(CHART_CANDLE_LIMIT)
-
     candles = []
     for row in df.itertuples(index=False):
-        candles.append(
-            {
-                "time": int(row.timestamp.timestamp()),
-                "open": float(row.open),
-                "high": float(row.high),
-                "low": float(row.low),
-                "close": float(row.close),
-                "volume": float(row.volume),
-            }
-        )
-
+        candles.append({
+            "time": int(row.timestamp.timestamp()),
+            "open": float(row.open),
+            "high": float(row.high),
+            "low": float(row.low),
+            "close": float(row.close),
+            "volume": float(row.volume),
+        })
     return candles
 
 
@@ -72,10 +52,7 @@ def create_app():
 
     @app.context_processor
     def inject_globals():
-        return {
-            "coins": SUPPORTED_COINS,
-            "default_symbol": SYMBOL,
-        }
+        return {"coins": SUPPORTED_COINS, "default_symbol": SYMBOL}
 
     @app.route("/")
     def dashboard():
@@ -94,15 +71,11 @@ def create_app():
             "candles": candles,
             "setup": report["setup"],
             "levels": report["levels"],
+            "scores": report.get("scores", {}),
         }
 
-        return render_template(
-            "dashboard.html",
-            report=report,
-            symbol=symbol,
-            timeframe=timeframe,
-            chart_data=chart_data,
-        )
+        return render_template("dashboard.html", report=report, symbol=symbol,
+                                timeframe=timeframe, chart_data=chart_data)
 
     @app.route("/api/signal")
     def api_signal():
@@ -116,31 +89,23 @@ def create_app():
 
         market = MarketData()
         candles = _chart_candles(market, symbol, timeframe)
-        return jsonify(
-            {
-                "symbol": symbol,
-                "tf": timeframe,
-                "live": market.is_live,
-                "candles": candles,
-            }
-        )
+        return jsonify({
+            "symbol": symbol,
+            "tf": timeframe,
+            "live": market.is_live,
+            "candles": candles,
+        })
 
     @app.route("/backtest")
     def backtest_page():
         metrics, trades, backtest_live = _run_backtest()
-        return render_template(
-            "backtest.html",
-            metrics=metrics,
-            trades=trades,
-            live=backtest_live,
-            symbol=SYMBOL,
-        )
+        return render_template("backtest.html", metrics=metrics, trades=trades,
+                                live=backtest_live, symbol=SYMBOL)
 
     return app
 
 
 def _run_backtest():
-    """Run the historical backtest and return (metrics, trades, live_flag)."""
     from analysis.indicators import add_indicators
     from backtesting.mtf import prepare_mtf_data
     from backtesting.engine import BacktestEngine

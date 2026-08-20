@@ -1,126 +1,116 @@
 /**
- * Searchable coin switcher for the top bar.
- * Allows switching between well-known USDT pairs and searching for any other.
+ * Professional coin selector for the top bar.
+ * Acts like a trading terminal symbol selector.
  */
 (function () {
   const COINS = window.AI_TRADER_COINS || [];
 
-  const input = document.getElementById("coinInput");
-  const dropdown = document.getElementById("coinDropdown");
-  const list = document.getElementById("coinList");
-  const clearBtn = document.getElementById("coinClear");
-  const popularHead = document.getElementById("popularHead");
-  const search = document.getElementById("coinSearch");
+  const selector = document.getElementById("symbolSelector");
+  const dropdown = document.getElementById("symbolDropdown");
+  const list = document.getElementById("symbolList");
+  const input = document.getElementById("symbolSearchInput");
+  const selIcon = document.getElementById("selIcon");
+  const selName = document.getElementById("selName");
+  const selSub = document.getElementById("selSub");
 
-  if (!input || !dropdown || !list || !search) return;
+  if (!selector || !dropdown || !list) return;
 
   let activeIndex = -1;
+  let allCoins = [];
 
-  // The full pool of coins: popular first, then an alphabetically sorted set
-  // so anything searchable exists as a suggestion.
-  const all = Array.from(new Set([...COINS, ...defaultPool().sort()]));
-
-  function defaultPool() {
+  // Build full coin list from window coins + extras
+  function initCoins() {
     const extra = [
-      "1INCH", "1000SATS", "AAVE", "ACE", "ACH", "ACT", "AGIX", "AIOZ",
-      "ALGO", "ALT", "ANKR", "API3", "AR", "ARKM", "ARPA", "ASTR", "AUCTION",
-      "AXL", "AXS", "BABYDOGE", "BADGER", "BAKE", "BAL", "BAND", "BCH",
-      "BIGTIME", "BLUR", "BLZ", "BNX", "BOME", "BONK", "BTT", "C98", "CAKE",
-      "CETUS", "CFX", "CHZ", "CKB", "COMP", "CORE", "CVX", "CYBER", "DASH",
-      "DYDX", "DYM", "EGLD", "ENJ", "ENS", "EOS", "ETC", "FLOKI", "FLOW",
-      "FLR", "FORT", "FTM", "FXS", "GALA", "GAS", "GLM", "GMT", "GRT",
-      "HNT", "HYPE", "ICX", "ID", "ILV", "IMX", "IOTA", "JASMY", "JTO",
-      "JUP", "KAS", "KAVA", "KDA", "KSM", "LDO", "LINA", "LOOM", "LRC",
-      "LSK", "MAGIC", "MANA", "MASK", "MKR", "MNT", "MORPHO", "MOVR",
-      "MUBARAK", "NEO", "NKN", "NMR", "NTRN", "OCEAN", "OM", "ONE", "ONG",
-      "ONT", "ORCA", "ORDI", "PENDLE", "PEOPLE", "PHB", "PIXEL", "POL",
-      "POLYX", "POWR", "PYTH", "QTUM", "RARE", "RENDER", "RIF", "RONIN",
-      "RUNE", "RVN", "SAND", "SATS", "SCR", "SEI", "SKL", "SLP", "SNX",
-      "SOL", "SSV", "STEEM", "STORJ", "STX", "SUSHI", "SWEAT", "SXP",
-      "TAO", "THETA", "TIA", "TLM", "TWT", "UMA", "USDD", "USTC", "VET",
-      "VIC", "W", "WAVES", "WBTC", "WLD", "XEC", "XEM", "XMR", "XTZ",
-      "YGG", "ZEC", "ZEN", "ZIL", "ZRO", "ZRX",
+      "BTC","ETH","BNB","SOL","XRP","ADA","DOGE","DOT","LTC","LINK",
+      "AVAX","MATIC","TRX","SHIB","UNI","ATOM","XLM","ETC","FIL","NEAR",
+      "APT","SUI","ARB","OP","PEPE","TON","AAVE","CRV","INJ","SEI",
+      "WLD","MEME","BONK","FLOKI","KAS","JUP","JTO","PYTH","TIA","RUNE"
     ];
-    return extra;
+    allCoins = Array.from(new Set([...extra, ...COINS]));
   }
+  initCoins();
 
-  function open() {
-    dropdown.hidden = false;
+  function openDropdown() {
+    dropdown.classList.add("open");
+    selector.classList.add("open");
     input.focus();
+    activeIndex = -1;
+    render();
   }
 
-  function close() {
-    dropdown.hidden = true;
+  function closeDropdown() {
+    dropdown.classList.remove("open");
+    selector.classList.remove("open");
     activeIndex = -1;
   }
 
   function goTo(symbol) {
-    // Preserve any timeframe currently selected.
     const tf = new URLSearchParams(window.location.search).get("tf") || "1h";
-    window.location.href = `/?symbol=${encodeURIComponent(symbol)}&tf=${encodeURIComponent(tf)}`;
+    window.location.href = "/?symbol=" + encodeURIComponent(symbol) + "&tf=" + encodeURIComponent(tf);
   }
 
-  function render(items) {
+  function render() {
+    const q = input.value.trim().toUpperCase();
+    let items;
+
+    if (!q) {
+      // Show popular first
+      items = allCoins.slice(0, 40);
+    } else {
+      items = allCoins.filter(c => c.startsWith(q) || c.includes(q)).slice(0, 40);
+    }
+
     list.innerHTML = "";
     if (items.length === 0) {
-      const li = document.createElement("li");
-      li.className = "coin-empty";
-      li.textContent = "رمزارزی پیدا نشد";
-      list.appendChild(li);
+      const div = document.createElement("div");
+      div.className = "dd-empty";
+      div.textContent = "No coins found";
+      list.appendChild(div);
       return;
     }
-    items.forEach((c, idx) => {
-      const li = document.createElement("li");
-      li.className = "coin-item" + (idx === activeIndex ? " active" : "");
-      li.textContent = c;
-      li.dataset.symbol = c;
-      li.addEventListener("click", () => goTo(c));
-      li.addEventListener("mousemove", () => {
+
+    items.forEach((coin, idx) => {
+      const div = document.createElement("div");
+      div.className = "dd-item" + (idx === activeIndex ? " active" : "");
+      div.innerHTML = `
+        <span class="dd-item-icon">${coin.charAt(0)}</span>
+        <span class="dd-item-name">${coin}</span>
+        <span class="dd-item-full">${coin}/USDT</span>
+      `;
+      div.addEventListener("click", () => goTo(coin));
+      div.addEventListener("mousemove", () => {
         activeIndex = idx;
         paint();
       });
-      list.appendChild(li);
+      div.dataset.index = idx;
+      list.appendChild(div);
     });
   }
 
   function paint() {
-    const items = list.querySelectorAll(".coin-item");
-    items.forEach((li, idx) => {
-      li.classList.toggle("active", idx === activeIndex);
+    const items = list.querySelectorAll(".dd-item");
+    items.forEach((el, idx) => {
+      el.classList.toggle("active", idx === activeIndex);
     });
   }
 
-  function currentFilter() {
-    return input.value.trim().toUpperCase();
-  }
-
-  function refresh() {
-    const q = currentFilter();
-    if (!q) {
-      render(all.slice(0, 12));
-      popularHead.textContent = "پرمعامله‌ترین";
+  // Selector click
+  selector.addEventListener("click", (e) => {
+    if (dropdown.classList.contains("open")) {
+      closeDropdown();
     } else {
-      popularHead.textContent = "نتایج جستجو";
-      const matches = all.filter((c) => c.startsWith(q)).slice(0, 12);
-      render(matches);
+      openDropdown();
     }
-    popularHead.hidden = false;
-  }
-
-  input.addEventListener("focus", () => {
-    activeIndex = -1;
-    refresh();
-    open();
   });
 
+  // Search input
   input.addEventListener("input", () => {
     activeIndex = -1;
-    refresh();
-    open();
+    render();
   });
 
   input.addEventListener("keydown", (e) => {
-    const items = list.querySelectorAll(".coin-item");
+    const items = list.querySelectorAll(".dd-item");
     if (e.key === "ArrowDown") {
       e.preventDefault();
       activeIndex = Math.min(activeIndex + 1, items.length - 1);
@@ -131,27 +121,23 @@
       paint();
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const item = items[activeIndex >= 0 ? activeIndex : 0];
-      if (item) goTo(item.dataset.symbol);
+      const idx = activeIndex >= 0 ? activeIndex : 0;
+      const item = items[idx];
+      if (item) {
+        const name = item.querySelector(".dd-item-name")?.textContent;
+        if (name) goTo(name);
+      }
     } else if (e.key === "Escape") {
-      close();
+      closeDropdown();
       input.blur();
     }
   });
 
-  if (clearBtn) {
-    clearBtn.addEventListener("click", () => {
-      input.value = "";
-      activeIndex = -1;
-      refresh();
-      input.focus();
-    });
-  }
-
+  // Close on outside click
   document.addEventListener("click", (e) => {
-    if (!search.contains(e.target)) close();
+    if (!selector.contains(e.target)) closeDropdown();
   });
 
-  // Show a hint by default.
+  // Initial render
   activeIndex = -1;
 })();

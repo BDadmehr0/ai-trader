@@ -3,43 +3,54 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}AI BTC Trader{% endblock %}</title>
+  <title>{% block title %}AI Trader{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
+  <!-- Top Bar -->
   <header class="topbar">
-    <div class="brand">
-      <span class="logo">₿</span>
-      <span>AI BTC Trader</span>
-      <span class="pair">{{ symbol|default(default_symbol) }}</span>
-    </div>
-    <div class="coin-search" id="coinSearch">
-      <input
-        class="coin-input"
-        id="coinInput"
-        type="text"
-        placeholder="جستجوی رمزارز…"
-        autocomplete="off"
-        spellcheck="false"
-      >
-      <button class="coin-clear" id="coinClear" type="button" aria-label="پاک کردن" title="پاک کردن">×</button>
-      <div class="coin-dropdown" id="coinDropdown" hidden>
-        <div class="coin-list-head" id="popularHead">پرمعامله‌ترین</div>
-        <ul class="coin-list" id="coinList"></ul>
+    <!-- Symbol Selector (main header element) -->
+    <div class="selector" id="symbolSelector">
+      <div class="sel-icon" id="selIcon">₿</div>
+      <div class="sel-info">
+        <div class="sel-name" id="selName">{{ symbol|default('BTC') }}</div>
+        <div class="sel-sub" id="selSub">{{ symbol|default('BTC/USDT') }}</div>
+      </div>
+      <span class="sel-arrow">▼</span>
+
+      <!-- Dropdown -->
+      <div class="dropdown" id="symbolDropdown">
+        <div class="dd-search">
+          <input type="text" id="symbolSearchInput" placeholder="Search coin..." autocomplete="off" spellcheck="false">
+        </div>
+        <div class="dd-list" id="symbolList"></div>
       </div>
     </div>
+
+    <!-- Navigation -->
     <nav class="nav">
-      <a href="/" class="{{ 'active' if request.path == '/' else '' }}">سیگنال لحظه‌ای</a>
-      <a href="/backtest" class="{{ 'active' if request.path == '/backtest' else '' }}">بک‌تست</a>
+      <a href="/" class="{{ 'active' if request.path == '/' else '' }}">Signal</a>
+      <a href="/backtest" class="{{ 'active' if request.path == '/backtest' else '' }}">Backtest</a>
     </nav>
+
+    <!-- Right section -->
+    <div class="right">
+      <span class="badge {% if report and report.live %}live{% else %}demo{% endif %}" id="dataMode">
+        {% if report and report.live %}LIVE{% else %}DEMO{% endif %}
+      </span>
+    </div>
   </header>
+
+  <!-- Main Content -->
   <main class="container">
     {% block content %}{% endblock %}
   </main>
+
   <footer class="footer">
-    این سیستم فقط تحلیل تکنیکال ارائه می‌دهد و تضمین سوددهی ندارد.
+    AI Trading Dashboard — Technical analysis only, not financial advice.
   </footer>
+
   <script>window.AI_TRADER_COINS = {{ coins | tojson }};</script>
   <script src="{{ url_for('static', filename='coinswitcher.js') }}"></script>
   {% block scripts %}{% endblock %}
