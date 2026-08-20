@@ -1,5 +1,44 @@
 SYMBOL = "BTC/USDT"
 
+# Default quote currency for all pairs.
+QUOTE = "USDT"
+
+# Popular coins shown first in the top-bar switcher.
+SUPPORTED_COINS = [
+    "BTC",
+    "ETH",
+    "BNB",
+    "SOL",
+    "XRP",
+    "ADA",
+    "DOGE",
+    "DOT",
+    "LTC",
+    "LINK",
+    "AVAX",
+    "MATIC",
+    "TRX",
+    "SHIB",
+    "UNI",
+    "ATOM",
+    "XLM",
+    "ETC",
+    "FIL",
+    "NEAR",
+    "APT",
+    "SUI",
+    "ARB",
+    "OP",
+    "PEPE",
+    "TON",
+    "AAVE",
+    "CRV",
+    "INJ",
+    "SEI",
+    "WLD",
+    "MEME",
+]
+
 TIMEFRAMES = {
     "15M": "15m",
     "1H": "1h",
@@ -7,6 +46,9 @@ TIMEFRAMES = {
 }
 
 CANDLE_LIMIT = 1000
+
+# How many candles to send to the chart.
+CHART_CANDLE_LIMIT = 400
 
 
 # =========================
