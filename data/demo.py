@@ -22,6 +22,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from utils.timeutils import normalize_timestamps
+
 CACHE_DIR = Path(__file__).parent / "cache"
 
 # How many candles we want for every cached timeframe.
@@ -261,7 +263,7 @@ def load_demo(timeframe, symbol="BTC/USDT"):
 
     df = pd.read_csv(path)
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
-    return df
+    return normalize_timestamps(df)
 
 
 def supported_timeframes(symbol="BTC/USDT", available=("1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d")):

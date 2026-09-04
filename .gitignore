@@ -16,3 +16,6 @@ mypy_cache/
 *.egg-info/
 dist/
 build/
+
+# front-end toolchain (only the compiled webapp/static/tailwind.css is committed)
+node_modules/

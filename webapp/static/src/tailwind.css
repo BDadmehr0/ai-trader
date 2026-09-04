@@ -1,0 +1,665 @@
+/* =============================================================================
+   AI Trader — Tailwind entry point
+   -----------------------------------------------------------------------------
+   Source file for the panel's stylesheet. Build the served file with:
+
+       npm install          # once
+       npm run css          # -> webapp/static/tailwind.css
+       npm run css:watch    # during development
+
+   The compiled webapp/static/tailwind.css is committed, so the Flask panel
+   keeps working (offline, no Node) with a plain `python main.py panel`.
+
+   Everything the templates repeat (cards, chips, tables, probes, form fields)
+   lives in @layer components below and is written with @apply — that keeps the
+   markup short and keeps the dynamically-generated markup in static/*.js
+   (probe results, optimizer tables, coin dropdown) styled by the same kit.
+   ========================================================================== */
+
+@import "tailwindcss" source(none);
+
+/* content sources: Jinja templates + the JS that emits markup at runtime */
+@source "../../templates/**/*.html";
+@source "../*.js";
+
+/* =============================================================================
+   Design tokens — the "terminal" palette (Binance-like dark theme)
+   ========================================================================== */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Vazirmatn",
+    Tahoma, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* surfaces, darkest -> lightest */
+  --color-canvas: #0b0e11;   /* page background                     */
+  --color-sunken: #101318;   /* blocks inside a card                */
+  --color-surface: #181a20;  /* cards                               */
+  --color-elevated: #1e2329; /* inputs, chips, hover                */
+  --color-raised: #2b3139;   /* tracks, dividers, active pills      */
+  --color-line: #2b3139;     /* borders                             */
+
+  /* text */
+  --color-ink: #eaecef;
+  --color-ink-soft: #848e9c;
+  --color-ink-dim: #5e6673;
+
+  /* semantics */
+  --color-up: #0ecb81;
+  --color-down: #f6465d;
+  --color-warn: #f0b90b;
+  --color-accent: #1e80ff;
+  --color-violet: #a26bff;
+  --color-orange: #ff9f43;
+
+  --radius-card: 0.75rem;
+}
+
+/* =============================================================================
+   Base
+   ========================================================================== */
+@layer base {
+  html {
+    color-scheme: dark;
+    scrollbar-color: var(--color-line) var(--color-canvas);
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans text-sm leading-relaxed antialiased;
+  }
+
+  code {
+    @apply font-mono text-[0.92em] rounded bg-elevated px-1 py-px;
+  }
+
+  ::selection {
+    @apply bg-accent/30;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  ::-webkit-scrollbar {
+    @apply size-2.5;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-canvas;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full border-2 border-solid border-canvas bg-line;
+  }
+
+  /* range sliders share the accent colour without extra markup */
+  input[type="range"] {
+    @apply h-1.5 w-full cursor-pointer appearance-none rounded-full bg-raised accent-accent;
+  }
+}
+
+/* =============================================================================
+   Components — the shared kit
+   ========================================================================== */
+@layer components {
+  /* ---------------- containers ---------------- */
+  .card {
+    @apply rounded-card border border-line bg-surface;
+  }
+
+  .status-line {
+    @apply mb-4 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-dim;
+  }
+
+  .status-actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .section-label {
+    @apply mb-2 mt-4 text-[11px] font-semibold tracking-wider text-ink-soft uppercase;
+  }
+
+  .footer {
+    @apply mt-10 flex flex-wrap items-center justify-center gap-x-3 border-t border-line px-2 py-6
+           text-center text-xs text-ink-dim;
+  }
+
+  /* ---------------- buttons ---------------- */
+  .btn {
+    @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-md border
+           border-line bg-elevated px-3 py-1.5 text-[13px] font-semibold text-ink transition
+           hover:bg-raised disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply border-accent bg-accent text-white hover:bg-accent/85;
+  }
+  .btn-danger {
+    @apply text-down hover:bg-down/10;
+  }
+  .btn-sm {
+    @apply px-2.5 py-1 text-xs;
+  }
+
+  .mini-btn {
+    @apply inline-flex cursor-pointer items-center gap-1 rounded-md border border-line
+           bg-elevated px-2.5 py-1 text-[11px] font-semibold text-ink-soft transition
+           hover:bg-raised hover:text-ink disabled:cursor-progress disabled:opacity-50;
+  }
+
+  /* ---------------- chips / badges ---------------- */
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-elevated
+           px-2 py-0.5 text-[11px] font-semibold text-ink-soft;
+  }
+  .chip-ok {
+    @apply border-up/40 text-up;
+  }
+  .chip-warn {
+    @apply border-warn/40 text-warn;
+  }
+  .chip-muted {
+    @apply text-ink-dim;
+  }
+  .chip.is-on {
+    @apply border-warn/50 text-warn;
+  }
+  .chips {
+    @apply my-2 flex flex-wrap gap-1.5;
+  }
+
+  .badge {
+    @apply rounded px-2 py-0.5 text-[11px] font-bold;
+  }
+  .badge-live {
+    @apply bg-up/12 text-up;
+  }
+  .badge-csv,
+  .badge-demo {
+    @apply bg-warn/12 text-warn;
+  }
+  .engine-off {
+    @apply bg-raised text-ink-dim;
+  }
+  .engine-lexicon {
+    @apply bg-accent/15 text-accent;
+  }
+  .engine-ollama {
+    @apply bg-violet/20 text-violet;
+  }
+  .engine-openai {
+    @apply bg-up/15 text-up;
+  }
+
+  /* ---------------- banners ---------------- */
+  .banner {
+    @apply mb-3.5 rounded-card border border-warn/45 bg-warn/10 px-3.5 py-2.5 text-[13px] text-warn;
+  }
+  .banner-error {
+    @apply border-down/50 bg-down/10 text-down;
+  }
+  .banner .small,
+  .banner small {
+    @apply mt-0.5 block text-[11px] text-ink-soft;
+  }
+
+  /* ---------------- inline semantics ---------------- */
+  .win {
+    @apply font-semibold text-up;
+  }
+  .loss {
+    @apply font-semibold text-down;
+  }
+  .muted {
+    @apply text-ink-soft;
+  }
+  .tiny {
+    @apply text-[11px];
+  }
+  .tiny-chip {
+    @apply ms-1 inline-block rounded bg-raised px-1 py-px text-[10px] font-bold text-ink-soft;
+  }
+  .sl {
+    @apply font-semibold text-down;
+  }
+  .tp {
+    @apply font-semibold text-up;
+  }
+  .mono {
+    @apply font-mono text-xs;
+  }
+  .note-list {
+    @apply mt-2.5 list-none space-y-1 ps-4 text-[13px] text-ink-soft;
+  }
+  .note-list li::marker {
+    @apply text-ink-dim;
+  }
+
+  /* trend / regime pills */
+  .tre {
+    @apply inline-flex rounded-md px-2 py-0.5 text-xs font-semibold;
+  }
+  .tre-bull {
+    @apply bg-up/12 text-up;
+  }
+  .tre-bear {
+    @apply bg-down/12 text-down;
+  }
+  .tre-neut {
+    @apply bg-warn/12 text-warn;
+  }
+
+  /* ---------------- tables ---------------- */
+  .tbl,
+  .data-table {
+    @apply w-full border-collapse text-[13px];
+  }
+  .tbl td,
+  .tbl th,
+  .data-table td,
+  .data-table th {
+    @apply border-b border-line px-2.5 py-2;
+  }
+  .tbl td:first-child,
+  .data-table td:first-child {
+    @apply whitespace-nowrap text-ink-soft;
+  }
+  .tbl th,
+  .data-table th {
+    @apply text-start font-semibold text-ink-soft;
+  }
+  .table-wrap,
+  .twrap {
+    @apply overflow-x-auto;
+  }
+  .opt-table td,
+  .opt-table th {
+    @apply align-top text-xs;
+  }
+  .data-table tr.best td {
+    @apply bg-up/5;
+  }
+  .params-cell {
+    @apply max-w-[520px];
+  }
+  .pchip {
+    @apply mx-0.5 my-0.5 inline-block rounded border border-line bg-elevated px-1
+           font-mono text-[11px] text-ink-soft;
+  }
+
+  /* ---------------- metric tiles ---------------- */
+  .metric-grid {
+    @apply grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-4;
+  }
+  .metric {
+    @apply rounded-card border border-line bg-sunken p-3.5 text-center;
+  }
+  .mlabel {
+    @apply mb-1.5 text-xs text-ink-dim;
+  }
+  .mval {
+    @apply text-xl font-bold tabular-nums;
+  }
+
+  /* ---------------- settings form ---------------- */
+  .field {
+    @apply rounded-card border border-line bg-sunken p-2.5;
+  }
+  .field.changed {
+    @apply border-warn/55;
+  }
+  .field.invalid {
+    @apply border-down;
+  }
+  .flabel {
+    @apply mb-2 flex flex-wrap items-center gap-1.5 text-[13px] font-semibold text-ink;
+  }
+  .fhelp {
+    @apply mt-1.5 text-[11px] leading-relaxed text-ink-dim;
+  }
+  .fhelp .fa {
+    @apply block text-ink-soft;
+  }
+  .fhelp .meta {
+    @apply mt-0.5 block;
+  }
+  .field-error {
+    @apply mt-1 text-[11px] font-semibold text-down;
+  }
+  .field-input {
+    @apply w-full rounded-md border border-line bg-elevated px-2 py-1.5 text-[13px] text-ink
+           transition placeholder:text-ink-dim focus:border-accent focus:outline-none;
+  }
+  .numrow {
+    @apply flex items-center gap-2;
+  }
+  .numrow input[type="number"] {
+    @apply basis-[110px] grow-0;
+  }
+  .numrow input[type="range"] {
+    @apply flex-1;
+  }
+  .secretrow {
+    @apply flex gap-2;
+  }
+  .opt-tag {
+    @apply cursor-help font-bold text-violet;
+  }
+  .mod-tag {
+    @apply rounded bg-warn/12 px-1 py-px text-[9px] font-semibold tracking-wide text-warn uppercase;
+  }
+
+  .tabs {
+    @apply sticky top-14 z-40 -mx-1 mb-4 flex flex-wrap gap-1 border-b border-line
+           bg-canvas px-1 py-2;
+  }
+  .tab {
+    @apply flex cursor-pointer items-center gap-1.5 rounded-lg border border-transparent
+           px-3 py-1.5 text-[13px] font-semibold text-ink-soft transition
+           hover:bg-surface hover:text-ink;
+  }
+  .tab.active {
+    @apply border-line bg-surface text-ink;
+  }
+  .tab-icon {
+    @apply text-sm;
+  }
+  .tab-fa {
+    @apply text-[11px] text-ink-dim;
+  }
+  .group-head {
+    @apply mb-3.5 flex flex-wrap items-center justify-between gap-3;
+  }
+  .group-actions {
+    @apply flex flex-wrap items-center gap-2;
+  }
+  .panel-extra {
+    @apply mb-4 rounded-card border border-line bg-sunken p-3;
+  }
+  .upload-row {
+    @apply flex flex-wrap items-center gap-2;
+  }
+  .inline-check {
+    @apply inline-flex items-center gap-1.5 text-xs text-ink-soft;
+  }
+
+  .ai-steps {
+    @apply mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4;
+  }
+  .ai-steps .step {
+    @apply rounded-md border border-line bg-elevated px-2.5 py-2 text-xs text-ink-soft;
+  }
+  .ai-steps .step b {
+    @apply me-1.5 inline-block size-[18px] rounded-full bg-accent text-center text-[11px]
+           leading-[18px] font-bold text-white;
+  }
+
+  .csv-files {
+    @apply mt-2.5 flex max-h-[190px] flex-col gap-1 overflow-y-auto;
+  }
+  .csv-row {
+    @apply flex items-center gap-2.5 rounded-md bg-elevated px-2 py-1 text-xs;
+  }
+  .csv-row.active {
+    @apply ring-1 ring-up/40;
+  }
+  .csv-name {
+    @apply flex-1 text-ink;
+  }
+  .csv-profile {
+    @apply mt-2;
+  }
+
+  .weight-bars {
+    @apply grid gap-x-3.5 gap-y-1.5 sm:grid-cols-2;
+  }
+  .wrow {
+    @apply flex items-center gap-2 text-[11px] text-ink-soft;
+  }
+  .wlabel {
+    @apply basis-[78px];
+  }
+  .wtrack {
+    @apply h-1.5 flex-1 overflow-hidden rounded-full bg-raised;
+  }
+  .wfill {
+    @apply block h-1.5 bg-accent;
+  }
+  .wpct {
+    @apply basis-[34px] text-start tabular-nums;
+  }
+
+  /* ---------------- live probe results ---------------- */
+  .probe-slot:empty {
+    @apply hidden;
+  }
+  .probe {
+    @apply mt-2.5 rounded-e-md border-e-2 border-line bg-elevated px-2.5 py-2 text-xs text-ink-soft;
+  }
+  .probe.ok {
+    @apply border-e-up;
+  }
+  .probe.error {
+    @apply border-e-down;
+  }
+  .probe.loading {
+    @apply border-e-accent;
+  }
+  .probe-list {
+    @apply mt-2 list-none space-y-0.5 p-0;
+  }
+  .probe-list li {
+    @apply py-0.5 text-xs text-ink;
+  }
+  .warn-text {
+    @apply mt-1.5 text-warn;
+  }
+
+  /* ---------------- coin selector (top bar) ---------------- */
+  .selector {
+    @apply relative flex min-w-[140px] cursor-pointer select-none items-center gap-2
+           rounded-card border border-line bg-raised px-2.5 py-1.5 active:scale-[0.98];
+  }
+  .sel-icon {
+    @apply flex size-7 shrink-0 items-center justify-center rounded-full bg-raised
+           text-[13px] font-bold text-warn;
+  }
+  .sel-info {
+    @apply flex flex-col leading-tight;
+  }
+  .sel-name {
+    @apply text-sm font-semibold;
+  }
+  .sel-sub {
+    @apply text-[11px] text-ink-soft;
+  }
+  .sel-arrow {
+    @apply ms-auto text-[10px] text-ink-dim transition-transform;
+  }
+  .dropdown {
+    @apply absolute top-[calc(100%+6px)] start-0 z-50 w-[320px] rounded-xl border
+           border-line bg-surface shadow-2xl shadow-black/60;
+  }
+  .dd-search {
+    @apply border-b border-line p-3;
+  }
+  .dd-search input {
+    @apply w-full rounded-card border border-line bg-raised px-3 py-2 text-[13px] text-ink
+           outline-none placeholder:text-ink-dim focus:border-accent;
+  }
+  .dd-list {
+    @apply max-h-[340px] overflow-y-auto p-1;
+  }
+  .dd-item {
+    @apply flex cursor-pointer items-center gap-2.5 rounded-card px-3 py-2.5 hover:bg-elevated;
+  }
+  .dd-item.active {
+    @apply bg-elevated;
+  }
+  .dd-item-icon {
+    @apply flex size-6 shrink-0 items-center justify-center rounded-full bg-raised
+           text-[11px] font-semibold;
+  }
+  .dd-item-name {
+    @apply text-[13px] font-medium;
+  }
+  .dd-item-full {
+    @apply ms-auto text-[11px] text-ink-dim;
+  }
+  .dd-empty {
+    @apply p-4 text-center text-ink-dim;
+  }
+
+  /* ---------------- chart ---------------- */
+  .chart-tbar {
+    @apply flex flex-wrap items-center justify-between gap-3 border-b border-line p-3;
+  }
+  .tfs {
+    @apply flex gap-0.5 rounded-md bg-sunken p-0.5;
+  }
+  .tfs a {
+    @apply rounded-md px-3 py-1 text-xs font-medium text-ink-soft transition hover:text-ink;
+  }
+  .tfs a.active {
+    @apply bg-raised text-ink;
+  }
+  .ovgroup {
+    @apply flex flex-wrap items-center gap-1 rounded-md bg-sunken px-2 py-1;
+  }
+  .ovlabel {
+    @apply text-[10px] whitespace-nowrap text-ink-dim;
+  }
+  .ovbtn {
+    @apply cursor-pointer rounded-sm border border-line bg-transparent px-1.5 py-0.5
+           text-[10px] font-semibold text-ink-dim transition;
+  }
+  .ovbtn.active {
+    @apply bg-raised text-ink;
+  }
+  .ovbtn.active.green {
+    @apply border-up text-up;
+  }
+  .ovbtn.active.red {
+    @apply border-down text-down;
+  }
+  .ovbtn.active.cyan {
+    @apply border-accent text-accent;
+  }
+  .chart-legend {
+    @apply flex flex-wrap gap-x-3.5 gap-y-1 border-t border-line px-4 pt-2 pb-3
+           text-[11px] text-ink-dim;
+  }
+  .leg-item {
+    @apply inline-flex items-center gap-1.5;
+  }
+  .leg-item.up {
+    @apply text-up;
+  }
+  .leg-item.down {
+    @apply text-down;
+  }
+  .leg-swatch {
+    @apply inline-block size-2 rounded-sm;
+  }
+
+  /* ---------------- score breakdown ---------------- */
+  .breakdown {
+    @apply border-t border-line;
+  }
+  .brow {
+    @apply grid grid-cols-[130px_1fr_58px_64px] items-center gap-2.5 border-b
+           border-line/50 py-1.5 sm:grid-cols-[150px_1fr_70px_70px];
+  }
+  .brow.off {
+    @apply opacity-45;
+  }
+  .blabel {
+    @apply truncate text-[13px] text-ink;
+  }
+  .btrack {
+    @apply relative h-2 rounded-full bg-elevated;
+  }
+  .bmid {
+    @apply absolute start-1/2 -top-0.5 bottom-[-0.5rem] w-px bg-line;
+  }
+  .bfill {
+    @apply absolute top-0 h-2 rounded-full;
+  }
+  .bfill.pos {
+    @apply start-1/2 bg-up;
+  }
+  .bfill.neg {
+    @apply end-1/2 bg-down;
+  }
+  .bval,
+  .bweight {
+    @apply text-start text-xs tabular-nums text-ink-soft;
+  }
+
+  /* ---------------- gates ---------------- */
+  .gates {
+    @apply flex flex-wrap gap-2;
+  }
+  .gbadge {
+    @apply inline-flex items-center gap-1.5 rounded-md border border-line bg-sunken
+           px-2 py-1 text-xs;
+  }
+  .gdot {
+    @apply size-[7px] shrink-0 rounded-full bg-ink-dim;
+  }
+  .g-pass .gdot {
+    @apply bg-up;
+  }
+  .g-fail .gdot {
+    @apply bg-down;
+  }
+  .g-warn .gdot {
+    @apply bg-warn;
+  }
+  .glabel {
+    @apply font-bold;
+  }
+  .g-pass .glabel {
+    @apply text-up;
+  }
+  .g-fail .glabel {
+    @apply text-down;
+  }
+  .g-warn .glabel {
+    @apply text-warn;
+  }
+  .gnote {
+    @apply text-[11px] text-ink-dim;
+  }
+
+  /* ---------------- sentiment gauge ---------------- */
+  .gauge {
+    @apply relative h-2.5 flex-1 overflow-hidden rounded-full
+           bg-linear-to-r from-down/50 via-ink-dim/35 to-up/50;
+  }
+  .gauge-fill {
+    @apply absolute top-0 h-2.5 rounded-full bg-accent/55 transition-[width] duration-300;
+  }
+  .gauge-zero {
+    @apply absolute start-1/2 -top-0.5 bottom-[-0.5rem] w-px bg-ink-soft;
+  }
+  .fng-bar {
+    @apply relative mx-2 inline-block h-1.5 w-[120px] overflow-hidden rounded-full
+           bg-raised align-middle;
+  }
+
+  /* ---------------- toast ---------------- */
+  .toast {
+    @apply pointer-events-none fixed bottom-4 start-4 z-[300] max-w-[460px] translate-y-2 rounded-card
+           border-y border-s border-line border-e-[3px] border-e-accent bg-surface px-3.5 py-2.5
+           text-[13px] text-ink opacity-0 transition-all duration-200;
+  }
+  .toast.show {
+    @apply translate-y-0 opacity-100;
+  }
+  .toast.show.ok {
+    @apply border-e-up;
+  }
+  .toast.show.error {
+    @apply border-e-down;
+  }
+  .toast.show.warn {
+    @apply border-e-warn;
+  }
+}

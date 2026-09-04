@@ -150,6 +150,77 @@ class ServiceTests(unittest.TestCase):
         self.assertTrue(all(trade["direction"] == "LONG" for trade in long_only.trades))
 
 
+class MixedResolutionTests(unittest.TestCase):
+    """Regression: `merge_asof` dies when the frames disagree on the unit.
+
+    pandas 3 raises `MergeError: incompatible merge keys [0] datetime64[ms, UTC]
+    and datetime64[s, UTC], must be the same type` — which is exactly what the
+    panel hit when one timeframe came from the disk cache (epoch seconds) while
+    its neighbours were fetched live (milliseconds) or read from the demo CSVs
+    (microseconds).
+    """
+
+    def frames(self):
+        """Raw (no indicators) demo frames for the three default timeframes."""
+        from data.market_data import MarketData
+
+        with isolated_cache(), override_settings(**{**DEMO, "backtest_candles": 400}):
+            market = MarketData()
+            return {tf: market.get_ohlcv("BTC", tf, 400) for tf in ("15m", "1h", "4h")}
+
+    def test_mtf_merge_survives_mixed_timestamp_resolutions(self):
+        from analysis.indicators import add_indicators
+        from backtesting.mtf import prepare_mtf_data
+        from utils.timeutils import TIMESTAMP_DTYPE
+
+        with override_settings(**DEMO):
+            frames = {tf: add_indicators(frame) for tf, frame in self.frames().items()}
+        frames["1h"]["timestamp"] = frames["1h"]["timestamp"].astype("datetime64[s, UTC]")
+        frames["4h"]["timestamp"] = frames["4h"]["timestamp"].astype("datetime64[us, UTC]")
+
+        merged = prepare_mtf_data(frames["15m"], frames["1h"], frames["4h"])
+        self.assertGreater(len(merged), 60)
+        self.assertEqual(str(merged["timestamp"].dtype), TIMESTAMP_DTYPE)
+        self.assertTrue(merged["timestamp"].is_monotonic_increasing)
+
+    def test_backtest_runs_on_frames_from_mixed_sources(self):
+        from analysis.indicators import add_indicators
+
+        with override_settings(**DEMO):
+            frames = {tf: add_indicators(frame) for tf, frame in self.frames().items()}
+        frames["1h"]["timestamp"] = frames["1h"]["timestamp"].astype("datetime64[s, UTC]")
+
+        with isolated_cache(), override_settings(**{**DEMO, "backtest_candles": 400}):
+            result = run_backtest("BTC", frames=frames)
+        self.assertTrue(result.ok, result.error)
+        self.assertGreaterEqual(result.coverage["rows"], 60)
+
+    def test_optimizer_survives_mixed_resolutions(self):
+        from backtesting.optimizer import run as optimize
+
+        class MixedMarket:
+            """Hands out the 4h frame at second resolution, like a cached one."""
+
+            source, is_live = "demo", False
+
+            def __init__(self, frames):
+                self._frames = frames
+
+            def get_ohlcv(self, symbol, timeframe, limit=None):
+                frame = self._frames[timeframe].copy()
+                if timeframe == "4h":
+                    frame["timestamp"] = frame["timestamp"].astype("datetime64[s, UTC]")
+                return frame
+
+        market = MixedMarket(self.frames())
+        with isolated_cache(), override_settings(**{**DEMO, "backtest_candles": 400,
+                                                    "optimizer_trials": 2}):
+            payload = optimize("BTC", market=market)
+        self.assertTrue(payload["ok"], payload.get("error"))
+        self.assertIsNone(payload["error"])
+        self.assertIn("trials", payload)
+
+
 class OptimizerSpaceTests(unittest.TestCase):
     def test_default_space_only_touches_real_settings(self):
         from config.definition import ITEMS

@@ -3,71 +3,81 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
   <title>{% block title %}AI Trader{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
-  <!-- Top Bar -->
-  <header class="topbar">
-    <!-- Symbol Selector (main header element) -->
-    <div class="selector" id="symbolSelector">
-      <div class="sel-icon" id="selIcon">₿</div>
-      <div class="sel-info">
-        <div class="sel-name" id="selName">{{ symbol|default('BTC') if symbol else 'BTC' }}</div>
-        <div class="sel-sub" id="selSub">{{ report.symbol if report else default_symbol }}</div>
-      </div>
-      <span class="sel-arrow">▼</span>
 
-      <!-- Dropdown -->
-      <div class="dropdown" id="symbolDropdown">
-        <div class="dd-search">
-          <input type="text" id="symbolSearchInput" placeholder="Search coin..." autocomplete="off" spellcheck="false">
-        </div>
-        <div class="dd-list" id="symbolList"></div>
+{% macro nav_link(href, label, match, prefix=false) %}
+{% set active = request.path.startswith(match) if prefix else request.path == match %}
+<a href="{{ href }}"
+   class="rounded-card px-3 py-1.5 text-[13px] font-semibold transition {% if active %}bg-accent/10 text-accent{% else %}text-ink-soft hover:bg-raised hover:text-ink{% endif %}">{{ label }}</a>
+{% endmacro %}
+
+<!-- ============================ TOP BAR ============================ -->
+<header class="sticky top-0 z-[100] flex h-14 items-center gap-3 border-b border-line bg-elevated px-3 sm:gap-4 sm:px-5">
+
+  <!-- symbol selector (the main header control) -->
+  <div class="selector shrink-0" id="symbolSelector">
+    <span class="sel-icon" id="selIcon">₿</span>
+    <span class="sel-info">
+      <span class="sel-name" id="selName">{{ symbol if symbol else default_symbol }}</span>
+      <span class="sel-sub" id="selSub">{{ report.symbol if report else default_symbol }}</span>
+    </span>
+    <span class="sel-arrow" id="selArrow">▼</span>
+
+    <!-- dropdown -->
+    <div class="dropdown hidden" id="symbolDropdown">
+      <div class="dd-search">
+        <input type="text" id="symbolSearchInput" placeholder="Search coin..." autocomplete="off" spellcheck="false">
       </div>
+      <div class="dd-list" id="symbolList"></div>
     </div>
+  </div>
 
-    <!-- Navigation -->
-    <nav class="nav">
-      <a href="/" class="{{ 'active' if request.path == '/' else '' }}">Signal</a>
-      <a href="/backtest" class="{{ 'active' if request.path.startswith('/backtest') else '' }}">Backtest</a>
-      <a href="/journal" class="{{ 'active' if request.path.startswith('/journal') else '' }}">Journal</a>
-      <a href="/settings" class="{{ 'active' if request.path.startswith('/settings') else '' }}">Settings</a>
-    </nav>
+  <nav class="ms-auto flex min-w-0 items-center gap-0.5 overflow-x-auto">
+    {{ nav_link('/', 'Signal', '/') }}
+    {{ nav_link('/backtest', 'Backtest', '/backtest', true) }}
+    {{ nav_link('/journal', 'Journal', '/journal', true) }}
+    {{ nav_link('/settings', 'Settings', '/settings', true) }}
+  </nav>
 
-    <!-- Right section -->
-    <div class="right">
-      {% if report %}
-      <span class="badge {{ 'live' if report.data and report.data.live else 'demo' }}" id="dataMode"
+  <div class="flex shrink-0 items-center gap-2">
+    {% if report %}
+      {% set mode = 'live' if report.data and report.data.live else ('csv' if report.data and report.data.used == 'csv' else 'demo') %}
+      <span id="dataMode"
+            class="badge {% if mode == 'live' %}badge-live{% elif mode == 'csv' %}badge-csv{% else %}badge-demo{% endif %}"
             title="data source: {{ report.data.used if report.data else 'unknown' }}">
-        {% if report.data and report.data.live %}LIVE{% elif report.data and report.data.used == 'csv' %}CSV{% else %}DEMO{% endif %}
+        {{ 'LIVE' if mode == 'live' else ('CSV' if mode == 'csv' else 'DEMO') }}
       </span>
-      <span class="badge engine-{{ report.news.provider if report.news else 'off' }}" id="newsBadge"
+      <span id="newsBadge"
+            class="badge {% if report.news and report.news.available %}{% if report.news.provider == 'ollama' %}engine-ollama{% elif report.news.provider == 'openai' %}engine-openai{% else %}engine-lexicon{% endif %}{% else %}engine-off{% endif %}"
             title="{{ report.news.summary if report.news and report.news.available else (report.news.status if report.news else 'news off') }}">
         {% if report.news and report.news.available %}AI: {{ report.news.provider }}{% else %}AI: off{% endif %}
       </span>
-      {% else %}
-      <span class="badge demo" id="dataMode">—</span>
-      {% endif %}
-    </div>
-  </header>
+    {% else %}
+      <span class="badge badge-demo" id="dataMode">—</span>
+    {% endif %}
+  </div>
+</header>
 
-  <!-- Main Content -->
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
+<!-- ============================ MAIN ============================ -->
+<main class="mx-auto w-full max-w-[1280px] px-3 py-4 sm:px-5 sm:py-5">
+  {% block content %}{% endblock %}
+</main>
 
-  <footer class="footer">
-    AI Trader — تحلیل تکنیکال + اخبار؛ توصیه‌ی مالی نیست.
-    <span class="foot-config">config: {{ settings_meta.file if settings_meta else '' }}</span>
-  </footer>
+<footer class="footer">
+  <span>AI Trader — تحلیل تکنیکال + اخبار؛ توصیه‌ی مالی نیست.</span>
+  <span class="text-ink-dim/70">config: {{ settings_meta.file if settings_meta else '' }}</span>
+</footer>
 
-  <div id="toast" class="toast"></div>
+<div id="toast" class="toast"></div>
 
-  <script>window.AI_TRADER_COINS = {{ coins | tojson }};</script>
-  <script src="{{ url_for('static', filename='coinswitcher.js') }}"></script>
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
-  {% block scripts %}{% endblock %}
+<script>window.AI_TRADER_COINS = {{ coins | tojson }};</script>
+<script src="{{ url_for('static', filename='coinswitcher.js') }}"></script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

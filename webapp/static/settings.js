@@ -56,7 +56,7 @@
     });
     if (saveBadge) {
       saveBadge.textContent = changed ? `${changed} changed` : "no changes";
-      saveBadge.classList.toggle("on", changed > 0);
+      saveBadge.classList.toggle("is-on", changed > 0);
     }
     document.getElementById("saveButton").disabled = changed === 0;
     return changed;
@@ -109,7 +109,9 @@
   function openTab(id) {
     tabs.forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === id));
     document.querySelectorAll(".group-panel").forEach((panel) => {
-      panel.classList.toggle("active", panel.id === `group-${id}`);
+      const active = panel.id === `group-${id}`;
+      panel.classList.toggle("active", active);
+      panel.classList.toggle("hidden", !active);
     });
     if (id) history.replaceState(null, "", `#${id}`);
   }
@@ -233,7 +235,7 @@
           const news = data.news || {};
           const items = (news.items || []).slice(0, 8).map((item) =>
             `<li><span class="${item.score > 0.05 ? "win" : item.score < -0.05 ? "loss" : "muted"}">${(item.score >= 0 ? "+" : "") + item.score.toFixed(2)}</span>
-             <a href="${item.url}" target="_blank" rel="noopener">${item.headline}</a>
+             <a class="text-accent hover:underline" href="${item.url}" target="_blank" rel="noopener">${item.headline}</a>
              <span class="muted">${item.source} · ${item.method}</span></li>`).join("");
           return `<div class="probe ${news.available ? "ok" : "error"}">
             <div><b>${news.bias || "—"} ${news.sentiment !== undefined ? news.sentiment.toFixed(2) : ""}</b>
@@ -257,7 +259,7 @@
               <div>${data.available ? `score ${data.score} · ${data.crowd_state}` : "not available (" + data.status + ")"}</div>
               <ul class="probe-list">${(data.factors || []).map((f) => `<li>${f}</li>`).join("") || '<li class="muted">no positioning factors</li>'}</ul>
               ${(data.notes || []).length ? `<div class="muted tiny">${data.notes.join(" · ")}</div>` : ""}
-              <details><summary class="muted tiny">raw</summary><pre class="tiny">${rows}</pre></details></div>`;
+              <details><summary class="muted tiny">raw</summary><pre class="tiny font-mono whitespace-pre-wrap">${rows}</pre></details></div>`;
           })
           .catch((error) => box && (box.innerHTML = `<div class="probe error">${error.message}</div>`));
       } else if (kind === "data") {
@@ -280,8 +282,9 @@
 
   // ============================ csv upload ===========================
   const uploadForm = document.getElementById("uploadForm");
-  uploadForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
+
+  async function uploadCsv() {
+    if (!uploadForm) return;
     const fileInput = uploadForm.querySelector('input[type="file"]');
     if (!fileInput.files.length) return toast("pick a .csv first", "error");
 
@@ -304,6 +307,14 @@
       loadFiles();
     } catch (error) {
       toast(error.message, "error");
+    }
+  }
+
+  uploadForm?.querySelector("[data-upload]")?.addEventListener("click", uploadCsv);
+  uploadForm?.querySelector('input[name="timeframe"]')?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      uploadCsv();
     }
   });
 

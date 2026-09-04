@@ -20,6 +20,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from utils.timeutils import normalize_timestamps
+
 logger = logging.getLogger(__name__)
 
 CANDIDATES = {
@@ -102,7 +104,7 @@ def _parse_timestamps(frame: pd.DataFrame, timeframe: Optional[str]) -> pd.DataF
         start = end - pd.Timedelta(minutes=minutes * (len(frame) - 1))
         frame["timestamp"] = pd.date_range(start=start, periods=len(frame), freq=f"{minutes}min", tz="UTC")
 
-    return frame.sort_values("timestamp").reset_index(drop=True)
+    return normalize_timestamps(frame.sort_values("timestamp").reset_index(drop=True))
 
 
 def guess_timeframe(frame: pd.DataFrame) -> Optional[str]:

@@ -4,24 +4,27 @@
 {% macro control(item) %}
   {% set key = item.key %}
   {% if item.type == "bool" %}
-    <label class="switch">
-      <input type="checkbox" data-key="{{ key }}" {% if item.value %}checked{% endif %}>
-      <span class="switch-ui"></span>
-      <span class="switch-text">{{ "on" if item.value else "off" }}</span>
+    <label class="inline-flex cursor-pointer items-center gap-2 text-xs text-ink-soft">
+      <input type="checkbox" class="peer sr-only" data-key="{{ key }}" {% if item.value %}checked{% endif %}>
+      <span class="relative h-5 w-9 shrink-0 rounded-full border border-line bg-raised transition
+                   after:absolute after:top-0.5 after:start-0.5 after:h-3.5 after:w-3.5 after:rounded-full
+                   after:bg-ink-soft after:transition
+                   peer-checked:border-up/50 peer-checked:bg-up/25 peer-checked:after:start-[1.15rem] peer-checked:after:bg-up"></span>
+      <span class="min-w-[22px]">{{ "on" if item.value else "off" }}</span>
     </label>
   {% elif item.type == "enum" %}
-    <select data-key="{{ key }}">
+    <select class="field-input" data-key="{{ key }}">
       {% for choice in item.choices %}
       <option value="{{ choice }}" {% if item.value == choice %}selected{% endif %}>{{ choice }}</option>
       {% endfor %}
     </select>
   {% elif item.type == "list" %}
-    <textarea data-key="{{ key }}" rows="5" spellcheck="false">{{ item.widget }}</textarea>
+    <textarea class="field-input mono resize-y" data-key="{{ key }}" rows="5" spellcheck="false">{{ item.widget }}</textarea>
   {% elif item.type == "dict" %}
-    <textarea data-key="{{ key }}" rows="5" spellcheck="false" class="mono">{{ item.widget }}</textarea>
+    <textarea class="field-input mono resize-y" data-key="{{ key }}" rows="5" spellcheck="false">{{ item.widget }}</textarea>
   {% elif item.type in ("int", "float") %}
     <div class="numrow">
-      <input type="number" data-key="{{ key }}" value="{{ item.value }}"
+      <input class="field-input" type="number" data-key="{{ key }}" value="{{ item.value }}"
              step="{{ item.step or ('1' if item.type == 'int' else 'any') }}"
              {% if item.min is not none %}min="{{ item.min }}"{% endif %}
              {% if item.max is not none %}max="{{ item.max }}"{% endif %}>
@@ -29,55 +32,55 @@
       <input type="range" data-key="{{ key }}-range" data-pair="{{ key }}" value="{{ item.value }}"
              step="{{ item.step or 1 }}" min="{{ item.min }}" max="{{ item.max }}">
       {% endif %}
-      <button type="button" class="mini-btn reset-one" data-reset="{{ key }}" title="reset to default">{{ item.default }}</button>
+      <button type="button" class="mini-btn" data-reset="{{ key }}" title="reset to default">{{ item.default }}</button>
     </div>
   {% elif item.type == "text" %}
-    <textarea data-key="{{ key }}" rows="4" spellcheck="false">{{ item.value }}</textarea>
+    <textarea class="field-input resize-y" data-key="{{ key }}" rows="4" spellcheck="false">{{ item.value }}</textarea>
   {% elif item.secret %}
     <div class="secretrow">
-      <input type="password" data-key="{{ key }}" value="{{ item.value }}" spellcheck="false" autocomplete="off">
-      <button type="button" class="mini-btn reveal">show</button>
+      <input class="field-input" type="password" data-key="{{ key }}" value="{{ item.value }}" spellcheck="false" autocomplete="off">
+      <button type="button" class="mini-btn shrink-0" title="show / hide">show</button>
     </div>
   {% else %}
-    <input type="text" data-key="{{ key }}" value="{{ item.value }}" spellcheck="false" autocomplete="off">
+    <input class="field-input" type="text" data-key="{{ key }}" value="{{ item.value }}" spellcheck="false" autocomplete="off">
   {% endif %}
 {% endmacro %}
 
 {% block content %}
-<div class="settings-head">
+<div class="mb-4 flex flex-wrap items-start justify-between gap-5">
   <div>
-    <h1>Settings <span class="muted">· تنظیمات</span></h1>
-    <p class="muted">
+    <h1 class="text-2xl font-bold">Settings <span class="muted font-normal">· تنظیمات</span></h1>
+    <p class="muted mt-1 text-[13px]">
       saved to <code>{{ schema.file }}</code>
       {% if schema.file_exists %}
-      <span class="chip ok">file present</span>
+      <span class="chip chip-ok">file present</span>
       {% else %}
       <span class="chip">using built-in defaults</span>
       {% endif %}
       — every field is live: the next analysis run uses it immediately.
     </p>
   </div>
-  <div class="settings-actions">
+  <div class="flex flex-wrap items-center gap-2">
     <span id="changedCount" class="chip">no changes</span>
-    <button id="saveButton" class="btn primary" disabled>Save (Ctrl+S)</button>
-    <button id="revertButton" class="btn">Revert</button>
-    <button id="exportButton" class="btn">Export</button>
-    <button id="resetButton" class="btn danger">Reset all</button>
+    <button id="saveButton" class="btn btn-primary" disabled>Save (Ctrl+S)</button>
+    <button id="revertButton" class="btn" type="button">Revert</button>
+    <button id="exportButton" class="btn" type="button">Export</button>
+    <button id="resetButton" class="btn btn-danger" type="button">Reset all</button>
   </div>
 </div>
 
 <input type="hidden" id="probeSymbol" value="{{ default_symbol }}">
 
-{% if schema.file_error %}<div class="banner error">{{ schema.file_error }}</div>{% endif %}
+{% if schema.file_error %}<div class="banner banner-error">{{ schema.file_error }}</div>{% endif %}
 {% if schema.errors %}
-<div class="banner warn">settings rejected: {% for key, message in schema.errors.items() %}<b>{{ key }}</b> {{ message }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+<div class="banner">settings rejected: {% for key, message in schema.errors.items() %}<b>{{ key }}</b> {{ message }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
 {% endif %}
 
 <div class="tabs">
   {% for group in schema.groups %}
   <a class="tab" href="#{{ group.id }}" data-tab="{{ group.id }}">
     <span class="tab-icon">{{ group.icon }}</span>
-    <span class="tab-label">{{ group.label }}</span>
+    <span>{{ group.label }}</span>
     <span class="tab-fa">{{ group.label_fa }}</span>
   </a>
   {% endfor %}
@@ -86,9 +89,9 @@
 <form id="settingsForm" onsubmit="return false;">
 
   {% for group in schema.groups %}
-  <section class="card group-panel" id="group-{{ group.id }}">
+  <section class="card group-panel hidden p-5" id="group-{{ group.id }}">
     <div class="group-head">
-      <h2>{{ group.icon }} {{ group.label }} <span class="muted">{{ group.label_fa }}</span></h2>
+      <h2 class="text-[17px] font-semibold">{{ group.icon }} {{ group.label }} <span class="muted font-normal">{{ group.label_fa }}</span></h2>
       <div class="group-actions">
         {% if group.id == "data" %}
         <button type="button" class="mini-btn" data-probe="data">test data source</button>
@@ -107,18 +110,19 @@
 
     {% if group.id == "data" %}
     <div class="panel-extra">
-      <div class="upload-row">
-        <form id="uploadForm" enctype="multipart/form-data">
-          <input type="file" name="file" accept=".csv,text/csv">
-          <input type="text" name="timeframe" placeholder="native tf (auto)" size="6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div id="uploadForm" class="upload-row">
+          <input class="max-w-[260px] text-xs text-ink-soft file:me-2 file:cursor-pointer file:rounded-md
+                        file:border-0 file:bg-raised file:px-2.5 file:py-1.5 file:text-xs file:font-semibold file:text-ink"
+                 type="file" name="file" accept=".csv,text/csv">
+          <input class="field-input w-auto basis-24" type="text" name="timeframe" placeholder="native tf (auto)">
           <label class="inline-check"><input type="checkbox" name="activate" checked> use it now</label>
-          <button class="btn small" type="submit">upload</button>
-        </form>
-        <button class="btn small" type="button" id="csvClear">stop using CSV</button>
+          <button class="btn btn-sm" type="button" data-upload>upload</button>
+        </div>
+        <button class="btn btn-sm" type="button" id="csvClear">stop using CSV</button>
       </div>
       <div id="csvFiles" class="csv-files"></div>
-      <div class="probe-slot" data-result="derivatives"></div>
-      <p class="muted tiny">
+      <p class="mt-2.5 text-[11px] text-ink-dim">
         columns accepted: <code>timestamp/date, open, high, low, close, volume</code> — order and spelling are sniffed.
         تحلیل، بک‌تست و بهینه‌ساز همه روی همین فایل اجرا می‌شوند.
       </p>
@@ -134,8 +138,8 @@
         <div class="step"><b>3</b> engine = <b>ollama</b>، مدل را همین‌جا بنویس، «test model» را بزن</div>
         <div class="step"><b>4</b> بدون اینترنت/مدل، موتور آفلاین <b>lexicon</b> خودش امتیاز می‌دهد (fallback خودکار)</div>
       </div>
-      <div class="probe-slot" data-result="llm"></div>
-      <div class="probe-slot" data-result="news"></div>
+      <div data-result="llm" class="probe-slot"></div>
+      <div data-result="news" class="probe-slot"></div>
     </div>
     {% endif %}
 
@@ -152,9 +156,9 @@
     </div>
     {% endif %}
 
-    <div class="fields">
+    <div class="grid gap-x-4 gap-y-3.5 sm:grid-cols-2 xl:grid-cols-3">
       {% for item in group["items"] %}
-      <div class="field type-{{ item.type }}{% if item.optimizer %} optimizable{% endif %}" data-field="{{ item.key }}">
+      <div class="field" data-field="{{ item.key }}">
         <label class="flabel" title="{{ item.key }}">
           {{ item.label }}
           {% if item.optimizer %}<span class="opt-tag" title="optimizer can search this">∿</span>{% endif %}
@@ -171,14 +175,14 @@
   </section>
   {% endfor %}
 
-  <section class="card group-panel" id="group-import">
-    <div class="group-head"><h2>⤓ Import a config file</h2></div>
-    <div class="fields one">
-      <div class="field type-text">
-        <label class="flabel">paste exported JSON</label>
-        <textarea id="importBox" rows="8" class="mono" placeholder='{"entry_threshold": 25}'></textarea>
+  <section class="card group-panel hidden p-5" id="group-import">
+    <div class="group-head"><h2 class="text-[17px] font-semibold">⤓ Import a config file</h2></div>
+    <div class="grid grid-cols-1">
+      <div class="field">
+        <label class="flabel" for="importBox">paste exported JSON</label>
+        <textarea id="importBox" rows="8" class="field-input mono resize-y" placeholder='{"entry_threshold": 25}'></textarea>
         <div class="fhelp"><span class="fa">فقط کلیدهایی که می‌شناسد اعمال می‌شوند؛ بقیه نادیده گرفته می‌شوند.</span></div>
-        <button type="button" class="btn small" id="importButton">import</button>
+        <button type="button" class="btn btn-sm mt-2" id="importButton">import</button>
       </div>
     </div>
   </section>
