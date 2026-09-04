@@ -24,6 +24,7 @@ from config.store import get_settings
 from data.csv_source import load_csv, profile as csv_profile, resample, timeframe_minutes
 from data.demo import ensure_demo_data, load_demo
 from utils.cache import cache_for
+from utils.timeutils import normalize_timestamps
 
 load_dotenv()
 
@@ -53,6 +54,9 @@ def _frame_from_rows(rows) -> pd.DataFrame:
     if "timestamp" in frame.columns:
         frame["timestamp"] = pd.to_datetime(pd.to_numeric(frame["timestamp"], errors="coerce"),
                                             unit="s", utc=True)
+    # cache rows come back as epoch seconds; every other path is normalised too,
+    # so a cached frame can be merged with a freshly fetched one
+    frame = normalize_timestamps(frame)
     for column in NUMERIC_COLUMNS:
         if column in frame.columns:
             frame[column] = pd.to_numeric(frame[column], errors="coerce")
@@ -199,6 +203,10 @@ class MarketData:
 
         if frame is None:
             raise RuntimeError(f"no data available for {symbol} {timeframe}: {self._last_error}")
+
+        # one canonical resolution (datetime64[ms, UTC]) whatever the source was,
+        # otherwise merging an exchange frame with a cached/demo one explodes
+        frame = normalize_timestamps(frame)
 
         if ttl > 0 and len(frame):
             cache.write(key, {"rows": _rows_for_cache(frame), "source": self._source})

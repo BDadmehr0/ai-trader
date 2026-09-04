@@ -11,6 +11,8 @@ timeframes the user configured (15m/1h/4h, 5m/30m/2h, ...).
 
 import pandas as pd
 
+from utils.timeutils import normalize_timestamps
+
 
 def _suffix(frame: pd.DataFrame, suffix: str, skip=("timestamp",)) -> pd.DataFrame:
     return frame.rename(
@@ -41,12 +43,11 @@ def prepare_mtf_data(df_base, df_mid, df_high, drop_open_candle=True) -> pd.Data
     mid = _suffix(mid.sort_values("timestamp"), "mid")
     high = _suffix(high.sort_values("timestamp"), "high")
 
-    for frame in (mid, high):
-        if "timestamp" in frame.columns:
-            frame[["timestamp"]] = frame[["timestamp"]].apply(
-                pd.to_datetime, utc=True
-            )
-    base[["timestamp"]] = base[["timestamp"]].apply(pd.to_datetime, utc=True)
+    # One dtype for all three keys: the frames can come from different paths
+    # (cache = seconds, exchange = ms, demo = µs) and pandas 3 refuses to merge
+    # datetime64 columns whose resolutions differ. See utils/timeutils.py.
+    for frame in (base, mid, high):
+        normalize_timestamps(frame, inplace=True)
 
     merged = pd.merge_asof(base, mid, on="timestamp", direction="backward")
     merged = pd.merge_asof(merged, high, on="timestamp", direction="backward")

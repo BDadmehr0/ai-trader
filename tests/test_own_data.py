@@ -114,6 +114,16 @@ class LoadAndResampleTests(unittest.TestCase):
         self.assertEqual(frame.attrs["timeframe"], "15m")
         self.assertTrue((frame["high"] >= frame["low"]).all())
 
+    def test_timestamps_use_the_canonical_dtype(self):
+        # pandas 3 refuses to merge datetime64[ms] with datetime64[s]/[us], and
+        # every source used to pick its own resolution (ms / s / µs).
+        from utils.timeutils import TIMESTAMP_DTYPE
+
+        with clean_csv_cache():
+            frame = load_csv(self.path, use_cache=False)
+        self.assertEqual(str(frame["timestamp"].dtype), TIMESTAMP_DTYPE)
+        self.assertEqual(str(resample(frame, "1h", "15m")["timestamp"].dtype), TIMESTAMP_DTYPE)
+
     def test_timeframe_is_guessed_from_the_gaps(self):
         with clean_csv_cache():
             frame = load_csv(self.path, use_cache=False)
@@ -272,6 +282,28 @@ class MarketDataSourceTests(unittest.TestCase):
         self.assertGreater(len(frame), 30)
         self.assertIn(market.source, ("demo", "exchange"))
         self.assertTrue(market.describe())
+
+    def test_every_source_serves_the_same_timestamp_resolution(self):
+        from utils.timeutils import TIMESTAMP_DTYPE
+
+        for values in ({"data_source": "demo"}, {"data_source": "csv"}):
+            market = self.market(**values)
+            for timeframe in ("15m", "1h", "4h"):
+                frame = market.get_ohlcv("BTC", timeframe, 100)
+                self.assertEqual(str(frame["timestamp"].dtype), TIMESTAMP_DTYPE,
+                                 f"{values} · {timeframe}")
+
+    def test_cached_frames_keep_the_canonical_resolution(self):
+        # the disk cache stores epoch seconds: re-reading must still come back
+        # as datetime64[ms, UTC] or it cannot merge with a fresh frame
+        from utils.timeutils import TIMESTAMP_DTYPE
+
+        market = self.market(cache_minutes=5)
+        fresh = market.get_ohlcv("BTC", "15m", 100)
+        cached = self.market(cache_minutes=5).get_ohlcv("BTC", "15m", 100)
+        self.assertEqual(str(fresh["timestamp"].dtype), TIMESTAMP_DTYPE)
+        self.assertEqual(str(cached["timestamp"].dtype), TIMESTAMP_DTYPE)
+        self.assertEqual(str(cached["timestamp"].dtype), str(fresh["timestamp"].dtype))
 
     def test_demo_source_is_deterministic_per_symbol(self):
         first = self.market(data_source="demo").get_ohlcv("BTC", "15m", 60)

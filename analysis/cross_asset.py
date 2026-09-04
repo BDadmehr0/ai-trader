@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from config.store import get_settings
+from utils.timeutils import normalize_timestamps
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +128,8 @@ def analyze_cross_asset(symbol: str, df: Optional[pd.DataFrame], btc_df: Optiona
     if df is not None and len(df) > 5:
         try:
             lookback = max(20, int(settings.cross_asset_lookback))
-            asset = df[["timestamp", "close"]].tail(lookback).copy()
-            bench = btc_df[["timestamp", "close"]].tail(lookback).copy()
+            asset = normalize_timestamps(df[["timestamp", "close"]].tail(lookback))
+            bench = normalize_timestamps(btc_df[["timestamp", "close"]].tail(lookback))
             merged = pd.merge(asset, bench, on="timestamp", suffixes=("_a", "_b")).dropna()
 
             if len(merged) >= 12:

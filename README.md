@@ -211,7 +211,7 @@ backtesting/           موتور، چندتایم‌فریمه، معیارها
 webapp/                Flask: قالب‌ها + API + JS (نمودار، تنظیمات، بک‌تست)
 webapp/static/src/     ورودی Tailwind (تم و کامپوننت‌ها) — خروجی‌اش build می‌شود
 reports/               ساخت گزارش و نمودار
-tests/                 ۲۱۹ تست، آفلاین و بدون نیاز به شبکه
+tests/                 ۲۳۳ تست، آفلاین و بدون نیاز به شبکه
 ```
 
 ### رابط کاربری (Tailwind)
@@ -256,7 +256,7 @@ production که JS در لحظه می‌سازد (نتیجهٔ probeها، جد�
 ## ۶) تست‌ها
 
 ```bash
-python -m unittest discover -s tests      # ۲۱۹ تست، کاملاً آفلاین
+python -m unittest discover -s tests      # ۲۳۳ تست، کاملاً آفلاین
 ```
 
 ## عیب‌یابی
