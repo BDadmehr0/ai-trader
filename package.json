@@ -1,0 +1,14 @@
+{
+  "name": "ai-trader",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Front-end build for the AI Trader web panel (Tailwind CSS only — no bundler, no JS build step)",
+  "scripts": {
+    "css": "tailwindcss -i webapp/static/src/tailwind.css -o webapp/static/tailwind.css --minify",
+    "css:watch": "tailwindcss -i webapp/static/src/tailwind.css -o webapp/static/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}

@@ -12,8 +12,20 @@
 {% set cross = report.cross_asset or {} %}
 {% set gates = report.gates or {} %}
 {% set data = report.data or {} %}
+{% set is_buy = report.verdict == "BUY" %}
+{% set is_sell = report.verdict == "SELL" %}
+{% set has_trade = report.signal in ("LONG", "SHORT") %}
+
+{% macro trend_pill(label, trend) %}
+<span class="tre {% if trend == 'BULLISH' %}tre-bull{% elif trend == 'BEARISH' %}tre-bear{% else %}tre-neut{% endif %}">{{ label }}</span>
+{% endmacro %}
+
+{% macro signed(value, digits=2, suffix='') %}
+<span class="{% if value > 0 %}win{% elif value < 0 %}loss{% else %}muted{% endif %}">{{ "%+.*f"|format(digits, value) }}{{ suffix }}</span>
+{% endmacro %}
 
 {% block content %}
+<!-- ===================== STATUS ===================== -->
 <div class="status-line">
   <span id="updatedAt">Updated: {{ report.updated_at }} · {{ elapsed_ms }} ms</span>
   <span class="status-actions">
@@ -24,27 +36,27 @@
 </div>
 
 {% if not data.live %}
-<div class="banner warn">
+<div class="banner">
   <b>داده‌ی {{ 'CSV شما' if data.used == 'csv' else 'نمایشی (آفلاین)' }}</b>
   — این اعداد واقعی نیستند.
   {% if data.error %}<span class="muted">{{ data.error }}</span>{% endif %}
-  <a href="/settings#data">تنظیم داده</a>
+  <a class="ms-2 underline decoration-dotted" href="/settings#data">تنظیم داده</a>
 </div>
 {% endif %}
 {% if data.fetch_errors %}
-<div class="banner error">{% for err in data.fetch_errors %}{{ err }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+<div class="banner banner-error">{% for err in data.fetch_errors %}{{ err }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
 {% endif %}
 
 <!-- ===================== SIGNAL CARD ===================== -->
-<section class="card {{ report.verdict|lower }}" id="verdictCard">
-  <div class="card-head">
-    <div>
-      <div class="clabel">Trading Signal · {{ report.signal }}</div>
-      <div class="cverdict" id="verdictText">{{ report.verdict }}</div>
-      <div class="csub">
+<section class="card mb-5 overflow-hidden {% if is_buy %}border-up{% elif is_sell %}border-down{% else %}border-warn{% endif %}" id="verdictCard">
+  <div class="flex flex-wrap items-start justify-between gap-5 p-5 sm:p-6 sm:pb-4">
+    <div class="min-w-[240px] flex-1">
+      <div class="text-[11px] font-semibold tracking-widest text-ink-soft uppercase">Trading Signal · {{ report.signal }}</div>
+      <div class="text-[42px] leading-[1.1] font-extrabold {% if is_buy %}text-up{% elif is_sell %}text-down{% else %}text-warn{% endif %}" id="verdictText">{{ report.verdict }}</div>
+      <div class="mt-0.5 text-[15px] text-ink-soft">
         {% if report.verdict == "BUY" %}خرید / LONG{% elif report.verdict == "SELL" %}فروش / SHORT{% else %}صبر — بدون معامله{% endif %}
         {% if report.proposal and report.proposal != report.signal %}
-        <span class="chip warn" title="the scoring engine wanted this but a gate stopped it">blocked from {{ report.proposal }}</span>
+        <span class="chip chip-warn" title="the scoring engine wanted this but a gate stopped it">blocked from {{ report.proposal }}</span>
         {% endif %}
       </div>
       <div class="chips">
@@ -53,43 +65,48 @@
         <span class="chip">threshold {{ settings.entry_threshold }}</span>
         <span class="chip">stop {{ setup.stop_mode|default('—') }}</span>
         <span class="chip">targets {{ setup.target_mode|default('—') }}</span>
-        {% for missing in scores.missing|default([]) %}<span class="chip muted" title="no data — weight dropped">no {{ missing }}</span>{% endfor %}
+        {% for missing in scores.missing|default([]) %}<span class="chip chip-muted" title="no data — weight dropped">no {{ missing }}</span>{% endfor %}
       </div>
     </div>
-    <div class="cright">
-      <div class="cprice" id="priceText">{{ "{:,.4f}".format(report.price) if report.price < 10 else "{:,.2f}".format(report.price) }}</div>
-      <div class="cpair">{{ report.symbol }}</div>
-      <div class="cchange {% if report.change_24h_pct >= 0 %}up{% else %}down{% endif %}" id="changeText">
+
+    <div class="min-w-[140px] text-start">
+      <div class="text-[32px] font-bold tabular-nums" id="priceText">{{ "{:,.4f}".format(report.price) if report.price < 10 else "{:,.2f}".format(report.price) }}</div>
+      <div class="text-xs text-ink-dim">{{ report.symbol }}</div>
+      <div class="mt-0.5 text-sm {% if report.change_24h_pct >= 0 %}text-up{% else %}text-down{% endif %}" id="changeText">
         {{ "%+.2f"|format(report.change_24h_pct) }}% ({{ data.window_hours|default(24) }}h)
       </div>
     </div>
   </div>
 
-  <div class="confsect">
-    <div class="confbar"><div class="conffill" style="width: {{ report.confidence }}%"></div></div>
-    <div class="conftext">
+  <!-- confidence -->
+  <div class="px-5 pb-5 sm:px-6">
+    <div class="h-1.5 overflow-hidden rounded-full bg-raised">
+      <div class="h-1.5 rounded-full {% if is_buy %}bg-linear-to-r from-up/50 to-up{% elif is_sell %}bg-linear-to-r from-down/50 to-down{% else %}bg-linear-to-r from-warn/50 to-warn{% endif %}"
+           style="width: {{ report.confidence }}%"></div>
+    </div>
+    <div class="mt-1 flex justify-between text-xs text-ink-soft">
       <span>Confidence · اطمینان</span>
-      <span id="confText">{{ report.confidence }}%</span>
+      <span id="confText" class="tabular-nums">{{ report.confidence }}%</span>
     </div>
   </div>
 
-  <div class="card-body">
-    <!-- score breakdown -->
+  <div class="grid gap-5 px-5 pb-6 sm:px-6 lg:grid-cols-2">
+    <!-- ================= score breakdown ================= -->
     <div>
       <div class="section-label">Analysis breakdown · چرا این سیگنال؟</div>
       <div class="breakdown">
         {% for comp in (scores.breakdown or []) %}
-        <div class="brow {{ 'off' if not comp.available }}" title="{{ comp.note }}">
+        <div class="brow {% if not comp.available %}off{% endif %}" title="{{ comp.note }}">
           <div class="blabel">{{ comp.label }}</div>
           <div class="btrack">
-            <div class="bmid"></div>
+            <span class="bmid"></span>
             {% if comp.score >= 0 %}
-            <div class="bfill pos" style="width: {{ (comp.score / 2)|round(1) }}%; left: 50%"></div>
+            <span class="bfill pos" style="width: {{ (comp.score / 2)|round(1) }}%"></span>
             {% else %}
-            <div class="bfill neg" style="width: {{ (-comp.score / 2)|round(1) }}%; right: 50%"></div>
+            <span class="bfill neg" style="width: {{ (-comp.score / 2)|round(1) }}%"></span>
             {% endif %}
           </div>
-          <div class="bval {{ 'green' if comp.score > 5 else 'red' if comp.score < -5 else 'muted' }}">
+          <div class="bval {% if comp.score > 5 %}text-up{% elif comp.score < -5 %}text-down{% else %}text-ink-soft{% endif %}">
             {{ "%+.0f"|format(comp.score) }}
           </div>
           <div class="bweight">
@@ -100,145 +117,146 @@
         {% endfor %}
       </div>
 
-      <div class="scores">
-        <div class="scitem">
-          <div class="sclabel">Long</div>
-          <div class="scval {% if scores.long_score|default(0) > 50 %}green{% else %}yellow{% endif %}">{{ scores.long_score|default(0) }}</div>
+      <div class="mt-4 grid grid-cols-3 gap-2">
+        <div class="rounded-card border border-line bg-sunken p-3 text-center">
+          <div class="mb-1 text-[11px] text-ink-dim">Long</div>
+          <div class="text-xl font-bold tabular-nums {% if scores.long_score|default(0) > 50 %}text-up{% else %}text-warn{% endif %}">{{ scores.long_score|default(0) }}</div>
         </div>
-        <div class="scitem">
-          <div class="sclabel">Short</div>
-          <div class="scval {% if scores.short_score|default(0) > 50 %}red{% else %}yellow{% endif %}">{{ scores.short_score|default(0) }}</div>
+        <div class="rounded-card border border-line bg-sunken p-3 text-center">
+          <div class="mb-1 text-[11px] text-ink-dim">Short</div>
+          <div class="text-xl font-bold tabular-nums {% if scores.short_score|default(0) > 50 %}text-down{% else %}text-warn{% endif %}">{{ scores.short_score|default(0) }}</div>
         </div>
-        <div class="scitem">
-          <div class="sclabel">Neutral</div>
-          <div class="scval yellow">{{ scores.neutral_score|default(0) }}</div>
+        <div class="rounded-card border border-line bg-sunken p-3 text-center">
+          <div class="mb-1 text-[11px] text-ink-dim">Neutral</div>
+          <div class="text-xl font-bold tabular-nums text-warn">{{ scores.neutral_score|default(0) }}</div>
         </div>
       </div>
     </div>
 
-    <!-- setup + gates -->
+    <!-- ================= setup + gates ================= -->
     <div>
       <div class="section-label">Trade Setup · سطوح و اندازه</div>
-      {% if report.signal in ("LONG", "SHORT") %}
+      {% if has_trade %}
       <table class="tbl">
         <tr><td>Status</td><td>{{ setup.status }}</td></tr>
-        <tr><td>Entry</td><td>{{ "{:,.6g}".format(setup.entry) }}</td></tr>
-        <tr><td>Stop Loss <span class="muted">({{ setup.stop_mode }})</span></td><td class="sl">{{ "{:,.6g}".format(setup.stop_loss) }} ({{ setup.stop_distance_pct }}%)</td></tr>
-        <tr><td>Target 1</td><td class="tp">{{ "{:,.6g}".format(setup.take_profit_1) }}</td></tr>
-        <tr><td>Target 2</td><td class="tp">{{ "{:,.6g}".format(setup.take_profit_2) }}</td></tr>
-        <tr><td>Risk / Reward</td><td>1:{{ "%.2f"|format(setup.risk_reward_1) }} · 1:{{ "%.2f"|format(setup.risk_reward_2) }}</td></tr>
-        <tr><td>Position size</td><td>{{ "{:,.4f}".format(setup.position_size) }} <span class="muted">({{ "{:,.0f}".format(setup.notional) }} USDT)</span></td></tr>
-        <tr><td>Risk amount</td><td>{{ "{:,.2f}".format(setup.risk_amount) }} USDT <span class="muted">({{ (settings.risk_per_trade * 100)|round(2) }}%)</span></td></tr>
-        <tr><td>Margin</td><td>{{ "{:,.2f}".format(setup.margin_required) }} <span class="muted">({{ settings.leverage }}x)</span></td></tr>
+        <tr><td>Entry</td><td class="tabular-nums">{{ "{:,.6g}".format(setup.entry) }}</td></tr>
+        <tr><td>Stop Loss <span class="muted">({{ setup.stop_mode }})</span></td><td class="sl tabular-nums">{{ "{:,.6g}".format(setup.stop_loss) }} ({{ setup.stop_distance_pct }}%)</td></tr>
+        <tr><td>Target 1</td><td class="tp tabular-nums">{{ "{:,.6g}".format(setup.take_profit_1) }}</td></tr>
+        <tr><td>Target 2</td><td class="tp tabular-nums">{{ "{:,.6g}".format(setup.take_profit_2) }}</td></tr>
+        <tr><td>Risk / Reward</td><td class="tabular-nums">1:{{ "%.2f"|format(setup.risk_reward_1) }} · 1:{{ "%.2f"|format(setup.risk_reward_2) }}</td></tr>
+        <tr><td>Position size</td><td class="tabular-nums">{{ "{:,.4f}".format(setup.position_size) }} <span class="muted">({{ "{:,.0f}".format(setup.notional) }} USDT)</span></td></tr>
+        <tr><td>Risk amount</td><td class="tabular-nums">{{ "{:,.2f}".format(setup.risk_amount) }} USDT <span class="muted">({{ (settings.risk_per_trade * 100)|round(2) }}%)</span></td></tr>
+        <tr><td>Margin</td><td class="tabular-nums">{{ "{:,.2f}".format(setup.margin_required) }} <span class="muted">({{ settings.leverage }}x)</span></td></tr>
       </table>
       {% if setup.notes %}
-      <ul class="note-list">{% for note in setup.notes %}<li>{{ note }}</li>{% endfor %}</ul>
+      <ul class="note-list list-['›']">{% for note in setup.notes %}<li>{{ note }}</li>{% endfor %}</ul>
       {% endif %}
       {% else %}
       <p class="muted">No active trade signal — waiting for better conditions.</p>
       {% endif %}
 
-      <div class="section-label" style="margin-top:16px;">Quality gates · {{ gates.passed|default(0) }}/{{ gates.total|default(0) }} passed</div>
+      <div class="section-label">Quality gates · {{ gates.passed|default(0) }}/{{ gates.total|default(0) }} passed</div>
       <ul class="gates">
         {% for gate in (gates.gates or []) %}
-        <li class="g-{{ gate.status|lower }}">
+        {% set gstatus = gate.status|lower %}
+        <li class="gbadge {% if gstatus == 'pass' %}g-pass{% elif gstatus == 'fail' %}g-fail{% elif gstatus == 'warn' %}g-warn{% endif %}">
           <span class="gdot"></span>
           <span class="glabel">{{ gate.label }}</span>
           <span class="gnote">{{ gate.note }}</span>
-          {% if gate.status == 'FAIL' and gate.blocking %}<span class="gbadge">blocking</span>{% endif %}
+          {% if gate.status == 'FAIL' and gate.blocking %}<span class="chip chip-warn">blocking</span>{% endif %}
         </li>
         {% endfor %}
       </ul>
       {% if gates.blocked_by %}
-      <div class="banner warn small">signal demoted by: {{ gates.blocked_by|join('; ') }}</div>
+      <div class="banner mt-2.5 text-xs">signal demoted by: {{ gates.blocked_by|join('; ') }}</div>
       {% endif %}
     </div>
   </div>
 </section>
 
 <!-- ===================== CONTEXT ROW ===================== -->
-<div class="grid3">
+<div class="mb-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
   <!-- news / sentiment -->
-  <section class="card sentiment {{ (news.bias or 'NEUTRAL')|lower }}">
-    <h2>News & AI Sentiment</h2>
+  <section class="card p-5">
+    <h2 class="mb-3.5 text-base font-semibold">News &amp; AI Sentiment</h2>
     {% if news.available %}
-    <div class="sent-head">
+    <div class="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
       <div class="gauge">
         <div class="gauge-fill" style="width: {{ ((news.sentiment + 1) / 2 * 100)|round(1) }}%"></div>
         <span class="gauge-zero"></span>
       </div>
-      <div class="sent-num">
-        <div class="sent-score {{ 'green' if news.sentiment > 0.05 else 'red' if news.sentiment < -0.05 else '' }}">{{ "%+.2f"|format(news.sentiment) }}</div>
-        <div class="sent-bias">{{ news.bias }} · {{ news.impact }}</div>
+      <div>
+        <div class="text-xl font-bold tabular-nums {% if news.sentiment > 0.05 %}text-up{% elif news.sentiment < -0.05 %}text-down{% endif %}">{{ "%+.2f"|format(news.sentiment) }}</div>
+        <div class="text-[11px] text-ink-dim">{{ news.bias }} · {{ news.impact }}</div>
       </div>
     </div>
-    <div class="sent-meta">
+    <div class="chips">
       <span class="chip">{{ news.provider }}{% if news.model %} · {{ news.model }}{% endif %}</span>
       <span class="chip">{{ news.item_count }} items ({{ news.symbol_count }} on {{ news.symbol }})</span>
       <span class="chip">{{ news.confidence }}% conf</span>
-      <span class="chip">{{ (news.cache_state) }}{% if news.age_seconds %} · {{ (news.age_seconds / 60)|round(1) }}m{% endif %}</span>
+      <span class="chip">{{ news.cache_state }}{% if news.age_seconds %} · {{ (news.age_seconds / 60)|round(1) }}m{% endif %}</span>
     </div>
-    <ul class="headlines">
+    <ul class="mt-2 list-none space-y-1.5 p-0">
       {% for item in (news.items|default([]))[:6] %}
-      <li class="h-{{ (item.polarity or 'NEUTRAL')|lower }}">
-        <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.headline }}</a>
-        <span class="hmeta">{{ item.source }}{% if item.age_hours is not none %} · {{ item.age_hours }}h{% endif %} · {{ "%+.2f"|format(item.score) }}{% if item.method %} · {{ item.method }}{% endif %}</span>
+      <li class="border-s-2 ps-2 {% if (item.polarity or '')|lower == 'bullish' %}border-s-up{% elif (item.polarity or '')|lower == 'bearish' %}border-s-down{% else %}border-s-line{% endif %}">
+        <a class="text-[13px] text-ink hover:text-accent" href="{{ item.url }}" target="_blank" rel="noopener">{{ item.headline }}</a>
+        <div class="text-[11px] text-ink-dim">{{ item.source }}{% if item.age_hours is not none %} · {{ item.age_hours }}h{% endif %} · {{ "%+.2f"|format(item.score) }}{% if item.method %} · {{ item.method }}{% endif %}</div>
       </li>
       {% endfor %}
     </ul>
     {% if news.fear_greed %}
-    <div class="fng">
-      Fear &amp; Greed <b>{{ news.fear_greed.value|round(0)|int }}</b> ({{ news.fear_greed.label }}) · {{ news.fear_greed.trend }}
-      <div class="fng-bar"><div style="width: {{ news.fear_greed.value }}%"></div></div>
+    <div class="mt-3 text-xs text-ink-soft">
+      Fear &amp; Greed <b class="text-ink">{{ news.fear_greed.value|round(0)|int }}</b> ({{ news.fear_greed.label }}) · {{ news.fear_greed.trend }}
+      <span class="fng-bar"><span class="block h-1.5 bg-accent" style="width: {{ news.fear_greed.value }}%"></span></span>
     </div>
     {% endif %}
-    {% if news.get("veto") and news["veto"].get("triggered") %}<div class="banner warn small">{{ news.veto.note }}</div>{% endif %}
-    {% if news.notes %}<div class="muted tiny">{{ news.notes|join(' · ') }}</div>{% endif %}
+    {% if news.get("veto") and news["veto"].get("triggered") %}<div class="banner mt-2.5 text-xs">{{ news.veto.note }}</div>{% endif %}
+    {% if news.notes %}<div class="mt-2 text-[11px] text-ink-dim">{{ news.notes|join(' · ') }}</div>{% endif %}
     {% else %}
     <p class="muted">
       {% if not news.enabled %}news analysis is off —{% else %}{{ news.status }} —{% endif %}
       {{ news.error|default('no sentiment data') }}
     </p>
-    {% if news.notes %}<ul class="note-list">{% for note in news.notes[:4] %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
-    <a class="mini-btn" href="/settings#news">configure news engine</a>
+    {% if news.notes %}<ul class="note-list list-['›']">{% for note in news.notes[:4] %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+    <a class="mini-btn mt-2" href="/settings#news">configure news engine</a>
     {% endif %}
   </section>
 
   <!-- derivatives -->
-  <section class="card">
-    <h2>Derivatives &amp; Micro</h2>
+  <section class="card p-5">
+    <h2 class="mb-3.5 text-base font-semibold">Derivatives &amp; Micro</h2>
     {% if deriv.available %}
     <table class="tbl">
-      <tr><td>Positioning score</td><td class="{{ 'win' if deriv.positioning_score > 0 else 'loss' if deriv.positioning_score < 0 else '' }}">{{ "%+.0f"|format(deriv.positioning_score) }}</td></tr>
-      <tr><td>Funding (8h)</td><td>{{ "%+.4f"|format((deriv.funding_rate or 0) * 100) }}% <span class="muted">~{{ "%.1f"|format((deriv.funding_annual_pct or 0)) }}%/yr</span></td></tr>
-      <tr><td>Open interest</td><td>{{ "{:,.0f}".format(deriv.open_interest_value) if deriv.open_interest_value else '—' }}
+      <tr><td>Positioning score</td><td class="{% if deriv.positioning_score > 0 %}win{% elif deriv.positioning_score < 0 %}loss{% endif %} tabular-nums">{{ "%+.0f"|format(deriv.positioning_score) }}</td></tr>
+      <tr><td>Funding (8h)</td><td class="tabular-nums">{{ "%+.4f"|format((deriv.funding_rate or 0) * 100) }}% <span class="muted">~{{ "%.1f"|format((deriv.funding_annual_pct or 0)) }}%/yr</span></td></tr>
+      <tr><td>Open interest</td><td class="tabular-nums">{{ "{:,.0f}".format(deriv.open_interest_value) if deriv.open_interest_value else '—' }}
         <span class="muted">{{ "%+.1f"|format(deriv.oi_change_pct or 0) }}%</span></td></tr>
       <tr><td>OI vs price</td><td>{{ deriv.oi_price_alignment }}</td></tr>
-      <tr><td>Long/Short accounts</td><td>{{ "%.2f"|format(deriv.ls_account_ratio) if deriv.ls_account_ratio else '—' }}</td></tr>
-      <tr><td>Top traders</td><td>{{ "%.2f"|format(deriv.top_trader_ratio) if deriv.top_trader_ratio else '—' }}</td></tr>
-      <tr><td>Taker buy/sell</td><td>{{ "%.2f"|format(deriv.taker_buy_sell) if deriv.taker_buy_sell else '—' }}</td></tr>
-      <tr><td>Book imbalance</td><td>{{ "%+.1f"|format((deriv.book_imbalance or 0) * 100) }}% <span class="muted">spread {{ "%.3f"|format(deriv.spread_pct or 0) }}%</span></td></tr>
+      <tr><td>Long/Short accounts</td><td class="tabular-nums">{{ "%.2f"|format(deriv.ls_account_ratio) if deriv.ls_account_ratio else '—' }}</td></tr>
+      <tr><td>Top traders</td><td class="tabular-nums">{{ "%.2f"|format(deriv.top_trader_ratio) if deriv.top_trader_ratio else '—' }}</td></tr>
+      <tr><td>Taker buy/sell</td><td class="tabular-nums">{{ "%.2f"|format(deriv.taker_buy_sell) if deriv.taker_buy_sell else '—' }}</td></tr>
+      <tr><td>Book imbalance</td><td class="tabular-nums">{{ "%+.1f"|format((deriv.book_imbalance or 0) * 100) }}% <span class="muted">spread {{ "%.3f"|format(deriv.spread_pct or 0) }}%</span></td></tr>
       <tr><td>Crowding</td><td>{{ deriv.crowd_state }}</td></tr>
     </table>
-    {% if deriv.factors %}<ul class="note-list">{% for factor in deriv.factors[:4] %}<li>{{ factor }}</li>{% endfor %}</ul>{% endif %}
+    {% if deriv.factors %}<ul class="note-list list-['›']">{% for factor in deriv.factors[:4] %}<li>{{ factor }}</li>{% endfor %}</ul>{% endif %}
     {% else %}
     <p class="muted">not available ({{ deriv.status }}){% if deriv.error %} · {{ deriv.error }}{% endif %}</p>
     {% endif %}
   </section>
 
   <!-- cross asset -->
-  <section class="card">
-    <h2>BTC Regime &amp; Correlation</h2>
+  <section class="card p-5">
+    <h2 class="mb-3.5 text-base font-semibold">BTC Regime &amp; Correlation</h2>
     {% if cross.available %}
     <table class="tbl">
-      <tr><td>BTC regime</td><td><span class="tre {{ 'bull' if cross.btc_regime == 'BULLISH' else 'bear' if cross.btc_regime == 'BEARISH' else 'neut' }}">{{ cross.btc_regime }}</span> <span class="muted">{{ cross.btc_trend_strength }}</span></td></tr>
-      <tr><td>BTC score</td><td>{{ cross.btc_score }}</td></tr>
-      <tr><td>Correlation</td><td>{{ "%.2f"|format(cross.correlation) if cross.correlation is not none else '—' }}</td></tr>
-      <tr><td>Beta</td><td>{{ "%.2f"|format(cross.beta) if cross.beta is not none else '—' }}</td></tr>
-      <tr><td>Rel. strength vs BTC</td><td class="{{ 'win' if (cross.relative_strength_pct or 0) > 0 else 'loss' if (cross.relative_strength_pct or 0) < 0 else '' }}">{{ "%+.2f"|format(cross.relative_strength_pct or 0) }}%</td></tr>
-      <tr><td>Component score</td><td>{{ "%+.0f"|format(cross.score) }}</td></tr>
+      <tr><td>BTC regime</td><td>{{ trend_pill(cross.btc_regime, cross.btc_regime) }} <span class="muted">{{ cross.btc_trend_strength }}</span></td></tr>
+      <tr><td>BTC score</td><td class="tabular-nums">{{ cross.btc_score }}</td></tr>
+      <tr><td>Correlation</td><td class="tabular-nums">{{ "%.2f"|format(cross.correlation) if cross.correlation is not none else '—' }}</td></tr>
+      <tr><td>Beta</td><td class="tabular-nums">{{ "%.2f"|format(cross.beta) if cross.beta is not none else '—' }}</td></tr>
+      <tr><td>Rel. strength vs BTC</td><td class="{% if (cross.relative_strength_pct or 0) > 0 %}win{% elif (cross.relative_strength_pct or 0) < 0 %}loss{% endif %} tabular-nums">{{ "%+.2f"|format(cross.relative_strength_pct or 0) }}%</td></tr>
+      <tr><td>Component score</td><td class="tabular-nums">{{ "%+.0f"|format(cross.score) }}</td></tr>
     </table>
-    {% if cross.factors %}<ul class="note-list">{% for factor in cross.factors[:4] %}<li>{{ factor }}</li>{% endfor %}</ul>{% endif %}
+    {% if cross.factors %}<ul class="note-list list-['›']">{% for factor in cross.factors[:4] %}<li>{{ factor }}</li>{% endfor %}</ul>{% endif %}
     {% else %}
     <p class="muted">{{ cross.note|default('skipped') }} ({{ cross.status }})</p>
     {% endif %}
@@ -246,44 +264,44 @@
 </div>
 
 <!-- ===================== CHART ===================== -->
-<section class="card chart-box">
+<section class="card mb-5 overflow-hidden">
   <div class="chart-tbar">
-    <div class="chart-left">
+    <div class="flex items-center gap-2">
       <div class="tfs">
         {% for tf in timeframes %}
-        <a href="/?symbol={{ symbol }}&tf={{ tf }}" class="{{ 'active' if timeframe == tf else '' }}">{{ tf }}</a>
+        <a href="/?symbol={{ symbol }}&tf={{ tf }}" class="{% if timeframe == tf %}active{% endif %}">{{ tf }}</a>
         {% endfor %}
       </div>
-      <span class="muted tiny">analysis: {{ timeframes|join(' / ') }}</span>
+      <span class="text-[11px] text-ink-dim">analysis: {{ timeframes|join(' / ') }}</span>
     </div>
-    <div class="chart-right">
+    <div class="flex flex-wrap items-center gap-1.5">
       <div class="ovgroup">
         <span class="ovlabel">Overlays</span>
-        <button class="ovbtn active green" data-layer="candles">Candles</button>
-        <button class="ovbtn active green" data-layer="volume">Vol</button>
-        {% if ui.overlays.ema %}<button class="ovbtn active cyan" data-layer="ema">EMA</button>{% endif %}
-        {% if ui.overlays.bb %}<button class="ovbtn cyan" data-layer="bb">BB</button>{% endif %}
-        {% if ui.overlays.vwap %}<button class="ovbtn cyan" data-layer="vwap">VWAP</button>{% endif %}
-        {% if ui.overlays.supertrend %}<button class="ovbtn active cyan" data-layer="supertrend">ST</button>{% endif %}
-        <button class="ovbtn cyan" data-layer="rsi">RSI</button>
-        <button class="ovbtn cyan" data-layer="macd">MACD</button>
-        <button class="ovbtn cyan" data-layer="adx">ADX</button>
+        <button type="button" class="ovbtn active green" data-layer="candles">Candles</button>
+        <button type="button" class="ovbtn active green" data-layer="volume">Vol</button>
+        {% if ui.overlays.ema %}<button type="button" class="ovbtn active cyan" data-layer="ema">EMA</button>{% endif %}
+        {% if ui.overlays.bb %}<button type="button" class="ovbtn cyan" data-layer="bb">BB</button>{% endif %}
+        {% if ui.overlays.vwap %}<button type="button" class="ovbtn cyan" data-layer="vwap">VWAP</button>{% endif %}
+        {% if ui.overlays.supertrend %}<button type="button" class="ovbtn active cyan" data-layer="supertrend">ST</button>{% endif %}
+        <button type="button" class="ovbtn cyan" data-layer="rsi">RSI</button>
+        <button type="button" class="ovbtn cyan" data-layer="macd">MACD</button>
+        <button type="button" class="ovbtn cyan" data-layer="adx">ADX</button>
       </div>
       <div class="ovgroup">
-        <button class="ovbtn active green" data-layer="signals">Signals</button>
-        <button class="ovbtn active green" data-layer="levels">S/R</button>
-        <button class="ovbtn active cyan" data-layer="entries">Entry</button>
+        <button type="button" class="ovbtn active green" data-layer="signals">Signals</button>
+        <button type="button" class="ovbtn active green" data-layer="levels">S/R</button>
+        <button type="button" class="ovbtn active cyan" data-layer="entries">Entry</button>
       </div>
     </div>
   </div>
-  <div id="priceChart"></div>
+  <div id="priceChart" class="min-h-[400px] w-full"></div>
   <div class="chart-legend" id="chartLegend"></div>
 </section>
 
 <!-- ===================== TIMEFRAME TABLE ===================== -->
-<div class="grid2">
-  <section class="card">
-    <h2>Timeframe Analysis</h2>
+<div class="mb-5 grid gap-4 lg:grid-cols-2">
+  <section class="card p-5">
+    <h2 class="mb-3.5 text-base font-semibold">Timeframe Analysis</h2>
     <div class="twrap">
     <table class="tbl">
       <thead>
@@ -293,56 +311,56 @@
         {% for label, d in report.timeframes.items() %}
         <tr>
           <td>{{ label }}</td>
-          <td><span class="tre {{ 'bull' if d.trend == 'BULLISH' else 'bear' if d.trend == 'BEARISH' else 'neut' }}">{{ d.trend_en|default(d.trend) }}</span></td>
-          <td>{{ d.score }}</td>
-          <td>{{ "%.1f"|format(d.rsi) }}</td>
-          <td>{{ "%.0f"|format(d.adx|default(0)) }}</td>
-          <td>{{ "%.2f"|format(d.volume_ratio) }}x</td>
-          <td>{{ "%.2f"|format(d.atr_pct|default(0)) }}</td>
-          <td>{{ "%.2f"|format(d.bb_pct_b|default(0.5)) }}{% if d.bb_squeeze %} <span class="chip tiny-chip">squeeze</span>{% endif %}</td>
-          <td class="{{ 'win' if d.supertrend_dir > 0 else 'loss' }}">{{ '↑' if d.supertrend_dir > 0 else '↓' }}</td>
+          <td>{{ trend_pill(d.trend_en|default(d.trend), d.trend) }}</td>
+          <td class="tabular-nums">{{ d.score }}</td>
+          <td class="tabular-nums">{{ "%.1f"|format(d.rsi) }}</td>
+          <td class="tabular-nums">{{ "%.0f"|format(d.adx|default(0)) }}</td>
+          <td class="tabular-nums">{{ "%.2f"|format(d.volume_ratio) }}x</td>
+          <td class="tabular-nums">{{ "%.2f"|format(d.atr_pct|default(0)) }}</td>
+          <td class="tabular-nums">{{ "%.2f"|format(d.bb_pct_b|default(0.5)) }}{% if d.bb_squeeze %} <span class="tiny-chip">squeeze</span>{% endif %}</td>
+          <td class="{% if d.supertrend_dir > 0 %}win{% else %}loss{% endif %}">{{ '↑' if d.supertrend_dir > 0 else '↓' }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     </div>
-    <div class="muted tiny">VWAP distance: {% for label, d in report.timeframes.items() %}{{ label }} {{ "%+.2f"|format(d.vwap_dist_pct|default(0)) }}% {% endfor %}</div>
+    <div class="mt-2 text-[11px] text-ink-dim">VWAP distance: {% for label, d in report.timeframes.items() %}{{ label }} {{ "%+.2f"|format(d.vwap_dist_pct|default(0)) }}% {% endfor %}</div>
   </section>
 
-  <section class="card">
-    <h2>Support &amp; Resistance zones</h2>
+  <section class="card p-5">
+    <h2 class="mb-3.5 text-base font-semibold">Support &amp; Resistance zones</h2>
     <table class="tbl">
       <tbody>
         {% for zone in (report.levels.zones or []) %}
         <tr>
           <td>{{ zone.type }} <span class="muted">· {{ zone.strength }} · {{ zone.touches }} touches</span></td>
-          <td class="{{ 'sl' if zone.type == 'RESISTANCE' else 'tp' }}">{{ "{:,.6g}".format(zone.price) }}
+          <td class="{% if zone.type == 'RESISTANCE' %}sl{% else %}tp{% endif %} tabular-nums">{{ "{:,.6g}".format(zone.price) }}
             <span class="muted">({{ "%+.1f"|format(zone.distance_pct) }}%)</span></td>
         </tr>
         {% else %}
-        <tr><td>nearest support</td><td class="tp">{{ "{:,.6g}".format(report.levels.support_1) }}</td></tr>
-        <tr><td>nearest resistance</td><td class="sl">{{ "{:,.6g}".format(report.levels.resistance_1) }}</td></tr>
+        <tr><td>nearest support</td><td class="tp tabular-nums">{{ "{:,.6g}".format(report.levels.support_1) }}</td></tr>
+        <tr><td>nearest resistance</td><td class="sl tabular-nums">{{ "{:,.6g}".format(report.levels.resistance_1) }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
-    {% if report.levels.note %}<div class="muted tiny">{{ report.levels.note }}</div>{% endif %}
+    {% if report.levels.note %}<div class="mt-2 text-[11px] text-ink-dim">{{ report.levels.note }}</div>{% endif %}
   </section>
 </div>
 
 {% if ui.show_reasoning %}
-<section class="card">
-  <h2>Reasoning · استدلال تحلیل</h2>
-  <div class="exgrid">
-    <div class="excard green">
-      <h4>Bullish factors</h4>
-      <ul>{% for factor in (report.factors.bullish if report.factors else []) %}<li>{{ factor }}</li>{% endfor %}</ul>
+<section class="card p-5">
+  <h2 class="mb-3.5 text-base font-semibold">Reasoning · استدلال تحلیل</h2>
+  <div class="grid gap-3 sm:grid-cols-2">
+    <div class="rounded-card border border-line bg-sunken p-4">
+      <h4 class="mb-2 text-[11px] font-semibold tracking-wide text-ink-dim uppercase">Bullish factors</h4>
+      <ul class="list-['•'] space-y-1 ps-4 text-[13px] text-ink-soft marker:text-up">{% for factor in (report.factors.bullish if report.factors else []) %}<li>{{ factor }}</li>{% endfor %}</ul>
     </div>
-    <div class="excard red">
-      <h4>Bearish factors</h4>
-      <ul>{% for factor in (report.factors.bearish if report.factors else []) %}<li>{{ factor }}</li>{% endfor %}</ul>
+    <div class="rounded-card border border-line bg-sunken p-4">
+      <h4 class="mb-2 text-[11px] font-semibold tracking-wide text-ink-dim uppercase">Bearish factors</h4>
+      <ul class="list-['•'] space-y-1 ps-4 text-[13px] text-ink-soft marker:text-down">{% for factor in (report.factors.bearish if report.factors else []) %}<li>{{ factor }}</li>{% endfor %}</ul>
     </div>
   </div>
-  <div class="muted tiny">{{ report.explanation }}</div>
+  <div class="mt-3 text-[11px] text-ink-dim">{{ report.explanation }}</div>
 </section>
 {% endif %}
 {% endblock %}

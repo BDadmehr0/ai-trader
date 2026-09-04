@@ -6,22 +6,22 @@
   <span>Signal journal · {{ stats.records }} records · {{ stats.evaluated }} evaluated
     · file <code>{{ stats.path }}</code></span>
   <span class="status-actions">
-    <button class="mini-btn" id="evaluateNow">settle open signals</button>
+    <button type="button" class="mini-btn" id="evaluateNow">settle open signals</button>
     <a class="mini-btn" href="/settings#journal">journal settings</a>
   </span>
 </div>
 
 {% if not stats.enabled %}
-<div class="banner warn">journaling is disabled — turn on <code>journal_enabled</code> in settings to collect real accuracy data.</div>
+<div class="banner">journaling is disabled — turn on <code>journal_enabled</code> in settings to collect real accuracy data.</div>
 {% endif %}
 
-<div class="grid2">
-  <section class="card">
-    <h2>Accuracy so far <span class="muted">· دقت واقعی</span></h2>
+<div class="mb-5 grid gap-4 lg:grid-cols-2">
+  <section class="card p-5">
+    <h2 class="mb-3.5 text-base font-semibold">Accuracy so far <span class="muted font-normal">· دقت واقعی</span></h2>
     {% if stats.evaluated %}
     <div class="metric-grid">
-      <div class="metric"><div class="mlabel">Win rate</div><div class="mval {{ 'win' if stats.win_rate >= 50 else 'loss' }}">{{ stats.win_rate }}%</div></div>
-      <div class="metric"><div class="mlabel">Average R</div><div class="mval {{ 'win' if stats.avg_r > 0 else 'loss' }}">{{ stats.avg_r }}</div></div>
+      <div class="metric"><div class="mlabel">Win rate</div><div class="mval {% if stats.win_rate >= 50 %}text-up{% else %}text-down{% endif %}">{{ stats.win_rate }}%</div></div>
+      <div class="metric"><div class="mlabel">Average R</div><div class="mval {% if stats.avg_r > 0 %}text-up{% else %}text-down{% endif %}">{{ stats.avg_r }}</div></div>
       <div class="metric"><div class="mlabel">Best / worst</div><div class="mval">{{ stats.best_r }} / {{ stats.worst_r }}</div></div>
       <div class="metric"><div class="mlabel">Pending</div><div class="mval">{{ stats.pending }}</div></div>
     </div>
@@ -29,15 +29,15 @@
       <thead><tr><th>confidence bucket</th><th>trades</th><th>win rate</th><th>avg R</th></tr></thead>
       <tbody>
         {% for bucket, row in stats.by_confidence.items() %}
-        <tr><td>{{ bucket }}</td><td>{{ row.trades }}</td><td>{{ row.win_rate }}%</td><td>{{ row.avg_r }}</td></tr>
+        <tr><td>{{ bucket }}</td><td class="tabular-nums">{{ row.trades }}</td><td class="tabular-nums">{{ row.win_rate }}%</td><td class="tabular-nums">{{ row.avg_r }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
-    <table class="tbl" style="margin-top:10px;">
+    <table class="tbl mt-2.5">
       <thead><tr><th>symbol</th><th>trades</th><th>avg R</th></tr></thead>
       <tbody>
         {% for sym, row in stats.by_symbol.items() %}
-        <tr><td><a href="/?symbol={{ sym }}">{{ sym }}</a></td><td>{{ row.trades }}</td><td>{{ row.avg_r }}</td></tr>
+        <tr><td><a class="text-accent hover:underline" href="/?symbol={{ sym }}">{{ sym }}</a></td><td class="tabular-nums">{{ row.trades }}</td><td class="tabular-nums">{{ row.avg_r }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -48,16 +48,16 @@
     {% endif %}
   </section>
 
-  <section class="card">
+  <section class="card p-5">
     <div class="group-head">
-      <h2>Weight calibration</h2>
-      <div class="group-actions"><span class="chip {{ 'ok' if calibration.mode == 'adaptive' else '' }}">mode: {{ calibration.mode }}</span></div>
+      <h2 class="text-base font-semibold">Weight calibration</h2>
+      <div class="group-actions"><span class="chip {% if calibration.mode == 'adaptive' %}chip-ok{% endif %}">mode: {{ calibration.mode }}</span></div>
     </div>
     {% if calibration.meta.active %}
-    <p class="muted tiny">{{ calibration.meta.samples }} evaluated signals · adjustments below are applied automatically while
+    <p class="text-[11px] text-ink-dim">{{ calibration.meta.samples }} evaluated signals · adjustments below are applied automatically while
       <code>weight_mode = adaptive</code>.</p>
     {% else %}
-    <p class="muted tiny">{{ calibration.meta.note|default('not enough data yet') }}</p>
+    <p class="text-[11px] text-ink-dim">{{ calibration.meta.note|default('not enough data yet') }}</p>
     {% endif %}
     <table class="tbl">
       <thead><tr><th>component</th><th>base weight</th><th>multiplier</th><th>effective</th><th>IC</th></tr></thead>
@@ -66,20 +66,20 @@
         {% set row = calibration.components.get(name, {}) %}
         <tr>
           <td>{{ name }}</td>
-          <td>{{ weight }}</td>
-          <td>{{ calibration.multipliers.get(name, 1.0) }}</td>
-          <td>{{ calibration.effective_weights.get(name, weight) }}</td>
-          <td class="{{ 'win' if (row.ic or 0) > 0.1 else 'loss' if (row.ic or 0) < -0.1 else '' }}">{{ row.ic|default('—') }}</td>
+          <td class="tabular-nums">{{ weight }}</td>
+          <td class="tabular-nums">{{ calibration.multipliers.get(name, 1.0) }}</td>
+          <td class="tabular-nums">{{ calibration.effective_weights.get(name, weight) }}</td>
+          <td class="{% if (row.ic or 0) > 0.1 %}win{% elif (row.ic or 0) < -0.1 %}loss{% endif %} tabular-nums">{{ row.ic|default('—') }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
-    <a class="mini-btn" href="/settings#scoring">edit weights</a>
+    <a class="mini-btn mt-2" href="/settings#scoring">edit weights</a>
   </section>
 </div>
 
-<section class="card">
-  <h2>Latest signals</h2>
+<section class="card p-5">
+  <h2 class="mb-3.5 text-base font-semibold">Latest signals</h2>
   <div class="table-wrap">
   <table class="data-table">
     <thead><tr><th>time</th><th>symbol</th><th>signal</th><th>conf</th><th>price</th><th>outcome</th><th>R</th><th>components</th></tr></thead>
@@ -88,12 +88,12 @@
       <tr>
         <td class="muted">{{ record.ts[11:19] if record.ts else '' }}</td>
         <td>{{ record.symbol }}</td>
-        <td class="{{ 'win' if record.signal == 'LONG' else 'loss' if record.signal == 'SHORT' else 'muted' }}">{{ record.signal }}</td>
-        <td>{{ record.confidence }}</td>
-        <td>{{ "{:,.4g}".format(record.price) if record.price else '—' }}</td>
+        <td class="{% if record.signal == 'LONG' %}win{% elif record.signal == 'SHORT' %}loss{% else %}muted{% endif %}">{{ record.signal }}</td>
+        <td class="tabular-nums">{{ record.confidence }}</td>
+        <td class="tabular-nums">{{ "{:,.4g}".format(record.price) if record.price else '—' }}</td>
         <td>{% if record.outcome is none %}<span class="muted">open</span>{% elif record.outcome > 0 %}TP{% elif record.outcome < 0 %}SL{% else %}—{% endif %}</td>
-        <td class="{{ 'win' if (record.outcome_r or 0) > 0 else 'loss' if (record.outcome_r or 0) < 0 else '' }}">{{ record.outcome_r if record.outcome_r is not none else '' }}</td>
-        <td class="muted tiny">
+        <td class="{% if (record.outcome_r or 0) > 0 %}win{% elif (record.outcome_r or 0) < 0 %}loss{% endif %} tabular-nums">{{ record.outcome_r if record.outcome_r is not none else '' }}</td>
+        <td class="text-[11px] text-ink-dim">
           {% for name, value in (record.components or {}).items() %}{% if value %}{{ name[:3] }} {{ '%+.0f'|format(value) }} {% endif %}{% endfor %}
         </td>
       </tr>

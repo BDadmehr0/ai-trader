@@ -12,6 +12,7 @@
   const selIcon = document.getElementById("selIcon");
   const selName = document.getElementById("selName");
   const selSub = document.getElementById("selSub");
+  const selArrow = document.getElementById("selArrow");
 
   if (!selector || !dropdown || !list) return;
 
@@ -31,16 +32,16 @@
   initCoins();
 
   function openDropdown() {
-    dropdown.classList.add("open");
-    selector.classList.add("open");
+    dropdown.classList.remove("hidden");
+    selArrow?.classList.add("rotate-180");
     input.focus();
     activeIndex = -1;
     render();
   }
 
   function closeDropdown() {
-    dropdown.classList.remove("open");
-    selector.classList.remove("open");
+    dropdown.classList.add("hidden");
+    selArrow?.classList.remove("rotate-180");
     activeIndex = -1;
   }
 
@@ -96,7 +97,7 @@
 
   // Selector click
   selector.addEventListener("click", (e) => {
-    if (dropdown.classList.contains("open")) {
+    if (!dropdown.classList.contains("hidden")) {
       closeDropdown();
     } else {
       openDropdown();
