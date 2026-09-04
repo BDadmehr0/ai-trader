@@ -1,406 +1,270 @@
-/**
- * Professional Candlestick Chart with Overlay Controls
+/*
+ * Candlestick chart with server-computed overlays.
  *
- * Uses TradingView Lightweight Charts with toggleable layers.
+ * The indicator values come from the same Python code that produced the
+ * signal (analysis/indicators.py) instead of a browser approximation, so what
+ * you see is literally what the model saw. Layers are toggled from the chart
+ * toolbar; sub-panes (RSI / MACD / ADX) share the price scale system.
  */
 (function () {
-  if (!window.LightweightCharts) {
-    document.getElementById("priceChart").textContent =
-      "Chart library failed to load.";
-    return;
-  }
-
+  const el = document.getElementById("priceChart");
   const C = window.AI_TRADER_CHART;
-  if (!C || !C.candles || C.candles.length === 0) {
-    document.getElementById("priceChart").textContent =
-      "No chart data available.";
+
+  if (!window.LightweightCharts) {
+    if (el) el.textContent = "Chart library failed to load (offline?).";
+    return;
+  }
+  if (!C || !C.candles || !C.candles.length) {
+    if (el) el.textContent = "No chart data available.";
     return;
   }
 
-  // State of overlay layers
-  const layerState = {
+  const COLORS = {
+    up: "#0ecb81",
+    down: "#f6465d",
+    blue: "#1e80ff",
+    yellow: "#f0b90b",
+    purple: "#a26bff",
+    grid: "#1e2329",
+    border: "#2b3139",
+    text: "#848e9c",
+  };
+
+  const layers = {
     candles: true,
     volume: true,
     ema: true,
+    bb: false,
+    vwap: true,
+    supertrend: true,
     rsi: false,
     macd: false,
+    adx: false,
     signals: true,
     levels: true,
     entries: true,
   };
 
-  const el = document.getElementById("priceChart");
-  const height = Math.max(380, Math.min(560, window.innerHeight * 0.5));
-  el.style.height = height + "px";
+  const O = C.overlays || {};
 
-  // ===================== CREATE CHART =====================
+  // ============================ chart ==============================
+  const height = Math.max(400, Math.min(620, window.innerHeight * 0.55));
   const chart = LightweightCharts.createChart(el, {
+    height: height,
     layout: {
       background: { color: "#0b0e11" },
-      textColor: "#848e9c",
+      textColor: COLORS.text,
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
     },
-    grid: {
-      vertLines: { color: "#1e2329" },
-      horzLines: { color: "#1e2329" },
-    },
-    rightPriceScale: { borderColor: "#2b3139" },
-    timeScale: {
-      borderColor: "#2b3139",
-      timeVisible: true,
-      secondsVisible: false,
-      rightOffset: 6,
-    },
+    grid: { vertLines: { color: COLORS.grid }, horzLines: { color: COLORS.grid } },
+    rightPriceScale: { borderColor: COLORS.border },
+    timeScale: { borderColor: COLORS.border, timeVisible: true, secondsVisible: false, rightOffset: 5 },
     crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    localization: { priceFormatter: (price) => (Math.abs(price) >= 1000 ? price.toLocaleString() : price.toLocaleString(undefined, { maximumFractionDigits: 6 })) },
   });
 
-  // ===================== VOLUME (bottom panel) =====================
-  const volumeSeries = chart.addHistogramSeries({
-    priceFormat: { type: "volume" },
-    priceScaleId: "volume",
-    lastValueVisible: false,
+  // ============================ candles =============================
+  const candles = chart.addCandlestickSeries({
+    upColor: COLORS.up,
+    downColor: COLORS.down,
+    borderUpColor: COLORS.up,
+    borderDownColor: COLORS.down,
+    wickUpColor: COLORS.up,
+    wickDownColor: COLORS.down,
   });
-  chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+  candles.setData(C.candles.map((c) => ({ time: c.time, open: c.open, high: c.high, low: c.low, close: c.close })));
 
-  const volData = C.candles.map((c) => ({
-    time: c.time,
-    value: c.volume,
-    color: c.close >= c.open ? "rgba(14,203,129,0.3)" : "rgba(246,70,93,0.3)",
-  }));
-  volumeSeries.setData(volData);
+  // ============================ volume ==============================
+  const volume = chart.addHistogramSeries({ priceScaleId: "volume", lastValueVisible: false, priceFormat: { type: "volume" } });
+  volume.setData(C.candles.map((c) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? "rgba(14,203,129,0.35)" : "rgba(246,70,93,0.35)" })));
+  chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.86, bottom: 0 } });
 
-  // ===================== CANDLESTICK =====================
-  const candleSeries = chart.addCandlestickSeries({
-    upColor: "#0ecb81",
-    downColor: "#f6465d",
-    borderUpColor: "#0ecb81",
-    borderDownColor: "#f6465d",
-    wickUpColor: "#0ecb81",
-    wickDownColor: "#f6465d",
-  });
-  candleSeries.setData(
-    C.candles.map((c) => ({
-      time: c.time,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-    }))
-  );
-  chart.timeScale().fitContent();
-
-  // ===================== EMA LINES =====================
-  // Approximate EMAs from OHLCV data
-  function calcEMA(data, period) {
-    if (data.length < period) return [];
-    const k = 2 / (period + 1);
-    let ema = data[0].close;
-    const result = [{ time: data[0].time, value: ema }];
-    for (let i = 1; i < data.length; i++) {
-      ema = data[i].close * k + ema * (1 - k);
-      result.push({ time: data[i].time, value: ema });
-    }
-    return result;
+  // ============================ lines ===============================
+  function line(name, options, data) {
+    if (!data || !data.length) return null;
+    const series = chart.addLineSeries(Object.assign({ priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false }, options));
+    series.setData(data);
+    return series;
   }
 
-  const ema20Data = calcEMA(C.candles, 20);
-  const ema50Data = calcEMA(C.candles, 50);
-  const ema200Data = calcEMA(C.candles, 200);
+  const series = {
+    emaFast: line(null, { color: COLORS.blue, lineWidth: 1, title: "EMA fast" }, O.emaFast),
+    emaMid: line(null, { color: COLORS.yellow, lineWidth: 1, title: "EMA mid" }, O.emaMid),
+    emaSlow: line(null, { color: COLORS.purple, lineWidth: 1, title: "EMA slow" }, O.emaSlow),
+    bbUpper: line(null, { color: "rgba(160,170,190,0.55)", lineWidth: 1, title: "BB upper" }, O.bbUpper),
+    bbMid: line(null, { color: "rgba(160,170,190,0.3)", lineWidth: 1, lineStyle: 2 }, O.bbMid),
+    bbLower: line(null, { color: "rgba(160,170,190,0.55)", lineWidth: 1, title: "BB lower" }, O.bbLower),
+    vwap: line(null, { color: "#ff9f43", lineWidth: 2, title: "VWAP" }, O.vwap),
+    stUp: line(null, { color: COLORS.up, lineWidth: 2 }, O.superTrendUp),
+    stDown: line(null, { color: COLORS.down, lineWidth: 2 }, O.superTrendDown),
+  };
 
-  const ema20Series = chart.addLineSeries({
-    color: "#1e80ff",
-    lineWidth: 1,
-    priceLineVisible: false,
-    lastValueVisible: false,
-    title: "EMA20",
-  });
-  ema20Series.setData(ema20Data);
-
-  const ema50Series = chart.addLineSeries({
-    color: "#f0b90b",
-    lineWidth: 1,
-    priceLineVisible: false,
-    lastValueVisible: false,
-    title: "EMA50",
-  });
-  ema50Series.setData(ema50Data);
-
-  const ema200Series = chart.addLineSeries({
-    color: "#a26bff",
-    lineWidth: 1,
-    priceLineVisible: false,
-    lastValueVisible: false,
-    title: "EMA200",
-  });
-  ema200Series.setData(ema200Data);
-
-  // ===================== RSI PANEL =====================
-  function calcRSI(data, period) {
-    if (data.length < period + 1) return [];
-    const prices = data.map(c => c.close);
-    const changes = prices.slice(1).map((p, i) => p - prices[i]);
-    let gains = changes.map(c => c > 0 ? c : 0);
-    let losses = changes.map(c => c < 0 ? -c : 0);
-    let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period;
-    let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period;
-    const rsiValues = [];
-    for (let i = period; i < changes.length; i++) {
-      avgGain = (avgGain * (period - 1) + gains[i]) / period;
-      avgLoss = (avgLoss * (period - 1) + losses[i]) / period;
-      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-      const rsi = 100 - 100 / (1 + rs);
-      rsiValues.push({ time: data[i + 1].time, value: rsi });
-    }
-    return rsiValues;
-  }
-
-  const rsiSeries = chart.addLineSeries({
-    color: "#a26bff",
-    lineWidth: 1,
-    priceScaleId: "rsi",
-    lastValueVisible: false,
-    title: "RSI",
-  });
-  chart.priceScale("rsi").applyOptions({
-    scaleMargins: { top: 0.65, bottom: 0.35 },
-    visible: false,
-  });
-
-  const rsiData = calcRSI(C.candles, 14);
-  if (rsiData.length > 0) rsiSeries.setData(rsiData);
-
-  // RSI overbought/oversold lines
-  var rsiOverSeries = chart.addLineSeries({
-    color: "rgba(246,70,93,0.3)",
-    lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Dashed,
-    priceScaleId: "rsi",
-    lastValueVisible: false,
-  });
-  rsiOverSeries.setData(rsiData.map(function(d) { return { time: d.time, value: 70 }; }));
-
-  var rsiUnderSeries = chart.addLineSeries({
-    color: "rgba(14,203,129,0.3)",
-    lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Dashed,
-    priceScaleId: "rsi",
-    lastValueVisible: false,
-  });
-  rsiUnderSeries.setData(rsiData.map(function(d) { return { time: d.time, value: 30 }; }));;
-
-  // =================== MACD PANEL =====================
-  // Simple MACD approximation
-  function calcMACD(data, fast, slow, signal) {
-    if (data.length < slow + signal) return [];
-    const emaF = calcEMA(data, fast);
-    const emaS = calcEMA(data, slow);
-    const macdLine = [];
-    for (let i = 0; i < Math.min(emaF.length, emaS.length); i++) {
-      if (emaF[i] && emaS[i]) {
-        macdLine.push({ time: emaF[i].time, value: emaF[i].value - emaS[i].value });
-      }
-    }
-    // Signal line from macd
-    if (macdLine.length < signal) return [];
-    const k = 2 / (signal + 1);
-    let sig = macdLine[0].value;
-    const signalLine = [{ time: macdLine[0].time, value: sig }];
-    for (let i = 1; i < macdLine.length; i++) {
-      sig = macdLine[i].value * k + sig * (1 - k);
-      signalLine.push({ time: macdLine[i].time, value: sig });
-    }
-    // Histogram
-    const hist = [];
-    for (let i = 0; i < macdLine.length && i < signalLine.length; i++) {
-      hist.push({ time: macdLine[i].time, value: macdLine[i].value - signalLine[i].value });
-    }
-    return { macd: macdLine, signal: signalLine, hist: hist };
-  }
-
-  var macdScaleId = "macd";
-  var macdData = calcMACD(C.candles, 12, 26, 9);
-
-  const macdSeries = chart.addLineSeries({
-    color: "#1e80ff",
-    lineWidth: 1,
-    priceScaleId: macdScaleId,
-    lastValueVisible: false,
-    title: "MACD",
-  });
-  chart.priceScale(macdScaleId).applyOptions({
-    scaleMargins: { top: 0.65, bottom: 0.35 },
-    visible: false,
-  });
-
-  if (macdData && macdData.macd.length > 0) {
-    macdSeries.setData(macdData.macd);
-
-    // Signal line
-    const macdSignalSeries = chart.addLineSeries({
-      color: "#f0b90b",
-      lineWidth: 1,
-      priceScaleId: macdScaleId,
-      lastValueVisible: false,
+  // ============================ sub-panes ===========================
+  function pane(scaleId, top, bottom, visible) {
+    chart.priceScale(scaleId).applyOptions({
+      scaleMargins: { top: top, bottom: bottom },
+      visible: !!visible,
+      borderColor: COLORS.border,
     });
-    macdSignalSeries.setData(macdData.signal);
-
-    // Histogram
-    const macdHistSeries = chart.addHistogramSeries({
-      priceFormat: { type: "volume" },
-      priceScaleId: macdScaleId,
-      lastValueVisible: false,
-    });
-    macdHistSeries.setData(
-      macdData.hist.map(h => ({
-        time: h.time,
-        value: h.value,
-        color: h.value >= 0 ? "rgba(14,203,129,0.5)" : "rgba(246,70,93,0.5)",
-      }))
-    );
-
-    // Store for toggle
-    window.__macdSignalSeries = macdSignalSeries;
-    window.__macdHistSeries = macdHistSeries;
+    return scaleId;
   }
 
-  // ===================== SIGNAL / LEVEL LINES =====================
+  const rsiScale = pane("rsi", 0.72, 0.02, false);
+  const macdScale = pane("macd", 0.72, 0.02, false);
+  const adxScale = pane("adx", 0.72, 0.02, false);
+
+  const rsi = line("rsi", { color: COLORS.purple, lineWidth: 1, priceScaleId: rsiScale, title: "RSI" }, O.rsi);
+  const rsiOB = rsi && line("rsiOb", { color: "rgba(246,70,93,0.35)", lineWidth: 1, lineStyle: 2, priceScaleId: rsiScale },
+    O.rsi.map((p) => ({ time: p.time, value: 70 })));
+  const rsiOS = rsi && line("rsiOs", { color: "rgba(14,203,129,0.35)", lineWidth: 1, lineStyle: 2, priceScaleId: rsiScale },
+    O.rsi.map((p) => ({ time: p.time, value: 30 })));
+
+  const macdLine = line("macd", { color: COLORS.blue, lineWidth: 1, priceScaleId: macdScale, title: "MACD" }, O.macd);
+  const macdSignal = line("macdSig", { color: COLORS.yellow, lineWidth: 1, priceScaleId: macdScale }, O.macdSignal);
+  const macdHist = O.macdHist && O.macdHist.length
+    ? (() => {
+        const hist = chart.addHistogramSeries({ priceScaleId: macdScale, lastValueVisible: false });
+        hist.setData(O.macdHist.map((p) => ({ time: p.time, value: p.value, color: p.value >= 0 ? "rgba(14,203,129,0.5)" : "rgba(246,70,93,0.5)" })));
+        return hist;
+      })()
+    : null;
+
+  const adx = line("adx", { color: "#e0d13f", lineWidth: 1, priceScaleId: adxScale, title: "ADX" }, O.adx);
+  const adxLevel = adx && line("adxLevel", { color: "rgba(224,209,63,0.35)", lineWidth: 1, lineStyle: 2, priceScaleId: adxScale },
+    O.adx.map((p) => ({ time: p.time, value: 20 })));
+
+  // ============================ markers =============================
+  if (layers.signals && O.markers && O.markers.length) {
+    candles.setMarkers(O.markers);
+  }
+
+  // ==================== trade levels + zones ========================
+  const priceLines = [];
+
+  function priceLine(seriesRef, price, color, title, style, width) {
+    if (!price || price <= 0) return;
+    const lineRef = seriesRef.createPriceLine({
+      price: price,
+      color: color,
+      lineWidth: width || 1,
+      lineStyle: style === undefined ? LightweightCharts.LineStyle.Dashed : style,
+      axisLabelVisible: true,
+      title: title,
+    });
+    priceLines.push(lineRef);
+  }
+
+  const setup = C.setup || {};
+  const levels = C.levels || {};
   const isLong = C.signal === "LONG";
   const isShort = C.signal === "SHORT";
   const hasTrade = isLong || isShort;
 
-  // Semi-transparent blocks for buy/sell zones
-  if (hasTrade) {
-    const entry = C.setup.entry;
-    const stop = C.setup.stop_loss;
-    const tp1 = C.setup.take_profit_1;
+  if (layers.entries && hasTrade) {
+    priceLine(candles, setup.entry, "rgba(30,128,255,0.9)", "Entry", LightweightCharts.LineStyle.Solid, 2);
+    priceLine(candles, setup.stop_loss, "rgba(246,70,93,0.9)", "SL", LightweightCharts.LineStyle.Solid, 2);
+    priceLine(candles, setup.take_profit_1, "rgba(14,203,129,0.9)", "TP1", LightweightCharts.LineStyle.Solid, 2);
+    priceLine(candles, setup.take_profit_2, "rgba(14,203,129,0.5)", "TP2", LightweightCharts.LineStyle.Dotted, 1);
+  }
 
-    // Entry line
-    candleSeries.createPriceLine({
-      price: ntry,
-      color: "rgba(14,203,129,0.8)",
-      lineWidth: 2,
-      lineStyle: LightweightCharts.LineStyle.Solid,
-      axisLabelVisible: true,
-      title: "Entry",
+  const zones = (levels.zones || []).filter((z) => z && z.price > 0);
+  if (layers.levels) {
+    if (zones.length) {
+      zones.forEach((zone) =>
+        priceLine(candles, zone.price, zone.type === "RESISTANCE" ? "rgba(246,70,93,0.6)" : "rgba(14,203,129,0.6)",
+          `${zone.type[0]}${zone.touches ? "×" + zone.touches : ""}`, LightweightCharts.LineStyle.Dotted, 1)
+      );
+    } else {
+      priceLine(candles, levels.resistance_1, "rgba(246,70,93,0.6)", "R1", LightweightCharts.LineStyle.Dashed, 1);
+      priceLine(candles, levels.resistance_2, "rgba(246,70,93,0.35)", "R2", LightweightCharts.LineStyle.Dotted, 1);
+      priceLine(candles, levels.support_1, "rgba(14,203,129,0.6)", "S1", LightweightCharts.LineStyle.Dashed, 1);
+      priceLine(candles, levels.support_2, "rgba(14,203,129,0.35)", "S2", LightweightCharts.LineStyle.Dotted, 1);
+    }
+  }
+
+  // ============================ layer toggles =======================
+  const group = (refs, visible) => refs.forEach((ref) => ref && ref.applyOptions({ visible: visible }));
+
+  function applyState() {
+    candles.applyOptions({ visible: layers.candles });
+    group([volume], layers.volume);
+    chart.priceScale("volume").applyOptions({ visible: layers.volume });
+    group([series.emaFast, series.emaMid, series.emaSlow], layers.ema);
+    group([series.bbUpper, series.bbMid, series.bbLower], layers.bb);
+    group([series.vwap], layers.vwap);
+    group([series.stUp, series.stDown], layers.supertrend);
+    group([rsi, rsiOB, rsiOS], layers.rsi);
+    chart.priceScale("rsi").applyOptions({ visible: layers.rsi });
+    group([macdLine, macdSignal, macdHist], layers.macd);
+    chart.priceScale("macd").applyOptions({ visible: layers.macd });
+    group([adx, adxLevel], layers.adx);
+    chart.priceScale("adx").applyOptions({ visible: layers.adx });
+    if (candles.setMarkers) candles.setMarkers(layers.signals ? (O.markers || []) : []);
+    priceLines.forEach((ref) => ref.applyOptions({ visible: layers.levels || layers.entries }));
+  }
+
+  document.querySelectorAll(".ovbtn").forEach((button) => {
+    button.addEventListener("click", () => {
+      const name = button.dataset.layer;
+      if (!(name in layers)) return;
+      layers[name] = !layers[name];
+      button.classList.toggle("active", layers[name]);
+      applyState();
+      buildLegend();
     });
-
-    // Stop loss zone (red block from entry to stop)
-    if (isLong && stop < entry) {
-      createZone(candleSeries, entry, stop, "rgba(246,70,93,0.1)");
-    } else if (isShort && stop > entry) {
-      createZone(candleSeries, entry, stop, "rgba(246,70,93,0.1)");
-    }
-
-    // Take profit zone (green block from entry to TP1)
-    if (isLong && tp1 > entry) {
-      createZone(candleSeries, entry, tp1, "rgba(14,203,129,0.08)");
-    } else if (isShort && tp1 < entry) {
-      createZone(candleSeries, tp1, entry, "rgba(14,203,129,0.08)");
-    }
-  }
-
-  // Support / Resistance lines
-  if (C.levels) {
-    const r1 = C.levels.resistance_1;
-    const r2 = C.levels.resistance_2;
-    const s1 = C.levels.support_1;
-    const s2 = C.levels.support_2;
-
-    createLevelLine(candleSeries, r1, "#f6465d", "R1", LightweightCharts.LineStyle.Dashed);
-    createLevelLine(candleSeries, r2, "#f6465d", "R2", LightweightCharts.LineStyle.Dotted);
-    createLevelLine(candleSeries, s1, "#0ecb81", "S1", LightweightCharts.LineStyle.Dashed);
-    createLevelLine(candleSeries, s2, "#0ecb81", "S2", LightweightCharts.LineStyle.Dotted);
-  }
-
-  // Helper: create a price line
-  function createLevelLine(series, price, color, title, style) {
-    if (!price || price <= 0) return;
-    series.createPriceLine({
-      price: price,
-      color: color,
-      lineWidth: 1,
-      lineStyle: style,
-      axisLabelVisible: true,
-      title: title,
-    });
-  }
-
-  // Helper: create semi-transparent zone between two prices
-  function createZone(series, top, bottom, color) {
-    if (top === bottom) return;
-    const range = Math.abs(top - bottom);
-    if (range < 0.01) return;
-    // Use a price line at mid with very thick width + transparency effect
-    series.createPriceLine({
-      price: (top + bottom) / 2,
-      color: color,
-      lineWidth: 20,
-      lineStyle: LightweightCharts.LineStyle.Solid,
-      axisLabelVisible: false,
-    });
-  }
-
-  // ===================== LAYER TOGGLES (global function) =====================
-  window.toggleLayer = function(btn) {
-    const layer = btn.dataset.layer;
-    layerState[layer] = !layerState[layer];
-    btn.classList.toggle("active");
-    appyLayerState();
-  };
-
-  function appyLayerState() {
-    // Candles
-    candleSeries.applyOptions({ visible: layerState.candles });
-
-    // Volume
-    olumeSeries.applyOptions({ visible: layerState.volume });
-
-    // EMA
-    ema20Series.pplyOptions({ visible: layerState.ema });
-    ema50Series.applyOptions({ visible: layerState.ema });
-    ema200Series.applyOptions({ visible: layerState.ema });
-
-    // RSI
-    rsiSeries.applylyOptions({ visible: layerState.rsi });
-    chart.priceScale("rsi").applyOptions({ visible: layerState.rsi });
-
-    // MACD
-    macdSeries.applylyOptions({ visible: layerState.macd });
-    chart.priceScale("macd").applyOptions({ visible: layerState.macd });
-    if (window.__macdSignalSeries) {
-      window.__macdSignalSeries.applyOptions({ visible: layerState.macd });
-    }
-    if (window.__macdHistSeries) {
-      window.__macdHistSeries.applyOptions({ visible: layerState.macd });
-    }
-  }
-
-  // ===================== LEGEND =====================
-  function buildLegend() {
-    const el = document.getElementById("chartLegend");
-    const items = [];
-    if (hasTrade) {
-      const entry = C.setup.entry;
-      const stop = C.setup.stop_loss;
-      const tp1 = C.setup.take_profit_1;
-      items.pushh(`<span class="leg-item"><span class="leg-swatch" style="background:var(--green)"></span>Entry: <b>${entry.toLocaleString()}</b></span>`);
-      items.pushh(`<span class="leg-item"><span class="leg-swatch" style="background:var(--red)"></span>Stop: <b>${stop.toLocaleString()}</b></span>`);
-      items.pushh(`<span class="leg-item"><span class="leg-swatch" style="background:var(--green)"></span>TP1: <b>${tp1.toLocaleString()}</b></span>`);
-    }
-    if (C.levels) {
-      items.push(`<span class="leg-item"><span class="leg-swatch" style="background:var(--red)"></span>R: ${C.levels.resistance_1.toLocaleString()}</span>`)
-      items.push(`<span class="leg-item"><span class="leg-swatch" style="background:var(--green)"></span>S: ${C.levels.support_1.toLocaleString()}</span>`);
-    }
-    el.innerHTML = items.join("") || '<span class="muted">No active signals</span>';
-  }
-  buildLegend();
-
-  // ===================== RESIZE =====================
-  window.addEventListener("resize", () => {
-    chart.applyOptions({ width: el.clientWidth });
   });
 
-  // ==================== READY =====================
-  // Initial appy of layer state
-  applyLayerState();
+  // ============================ legend ==============================
+  const byTime = new Map();
+  ["emaFast", "emaMid", "emaSlow", "rsi", "adx", "vwap", "bbUpper", "bbLower"].forEach((key) => {
+    (O[key] || []).forEach((point) => {
+      const row = byTime.get(point.time) || {};
+      row[key] = point.value;
+      byTime.set(point.time, row);
+    });
+  });
+
+  function short(price) {
+    if (price === null || price === undefined) return "—";
+    const abs = Math.abs(price);
+    return abs >= 1000 ? price.toLocaleString(undefined, { maximumFractionDigits: 1 })
+      : abs >= 1 ? price.toFixed(3) : price.toPrecision(4);
+  }
+
+  function buildLegend(row, candle) {
+    const el = document.getElementById("chartLegend");
+    if (!el) return;
+    const items = [];
+    const summary = O.summary || {};
+    const data = candle || C.candles[C.candles.length - 1];
+
+    items.push(`<span class="leg-item"><b>${C.symbol}</b> ${C.tf}</span>`);
+    if (data) {
+      items.push(`<span class="leg-item ${data.close >= data.open ? "up" : "down"}">O ${short(data.open)} H ${short(data.high)} L ${short(data.low)} C ${short(data.close)}</span>`);
+    }
+    if (layers.ema) items.push(`<span class="leg-item"><span class="leg-swatch" style="background:${COLORS.blue}"></span>EMA ${short((row || {}).emaFast || summary.ema_fast)}</span>`);
+    if (layers.vwap) items.push(`<span class="leg-item"><span class="leg-swatch" style="background:#ff9f43"></span>VWAP ${short((row || {}).vwap)} (${short(summary.vwap_dist_pct)}% gap)</span>`);
+    if (layers.rsi) items.push(`<span class="leg-item"><span class="leg-swatch" style="background:${COLORS.purple}"></span>RSI ${short((row || {}).rsi || summary.rsi)}</span>`);
+    if (layers.adx) items.push(`<span class="leg-item"><span class="leg-swatch" style="background:#e0d13f"></span>ADX ${short((row || {}).adx || summary.adx)}</span>`);
+    if (layers.supertrend) items.push(`<span class="leg-item">SuperTrend ${summary.supertrend_dir > 0 ? "↑" : "↓"}</span>`);
+    if (hasTrade) {
+      items.push(`<span class="leg-item"><span class="leg-swatch" style="background:${COLORS.blue}"></span>Entry ${short(setup.entry)}</span>`);
+      items.push(`<span class="leg-item"><span class="leg-swatch" style="background:${COLORS.down}"></span>SL ${short(setup.stop_loss)} (${setup.stop_distance_pct}%)</span>`);
+      items.push(`<span class="leg-item"><span class="leg-swatch" style="background:${COLORS.up}"></span>TP1 ${short(setup.take_profit_1)} · 1:${(setup.risk_reward_1 || 0).toFixed(2)}R</span>`);
+    }
+    items.push(`<span class="leg-item muted">${C.source}${C.live ? " · live" : " · not live"}</span>`);
+    el.innerHTML = items.join("");
+  }
+
+  chart.subscribeCrosshairMove((param) => {
+    if (!param || !param.time || !param.seriesData) return buildLegend();
+    const candle = param.seriesData.get(candles);
+    buildLegend(byTime.get(param.time), candle);
+  });
+
+  buildLegend();
+  applyState();
+  chart.timeScale().fitContent();
+
+  window.addEventListener("resize", () => chart.applyOptions({ width: el.clientWidth }));
 })();

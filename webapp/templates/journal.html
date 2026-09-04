@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Journal — AI Trader{% endblock %}
+
+{% block content %}
+<div class="status-line">
+  <span>Signal journal · {{ stats.records }} records · {{ stats.evaluated }} evaluated
+    · file <code>{{ stats.path }}</code></span>
+  <span class="status-actions">
+    <button class="mini-btn" id="evaluateNow">settle open signals</button>
+    <a class="mini-btn" href="/settings#journal">journal settings</a>
+  </span>
+</div>
+
+{% if not stats.enabled %}
+<div class="banner warn">journaling is disabled — turn on <code>journal_enabled</code> in settings to collect real accuracy data.</div>
+{% endif %}
+
+<div class="grid2">
+  <section class="card">
+    <h2>Accuracy so far <span class="muted">· دقت واقعی</span></h2>
+    {% if stats.evaluated %}
+    <div class="metric-grid">
+      <div class="metric"><div class="mlabel">Win rate</div><div class="mval {{ 'win' if stats.win_rate >= 50 else 'loss' }}">{{ stats.win_rate }}%</div></div>
+      <div class="metric"><div class="mlabel">Average R</div><div class="mval {{ 'win' if stats.avg_r > 0 else 'loss' }}">{{ stats.avg_r }}</div></div>
+      <div class="metric"><div class="mlabel">Best / worst</div><div class="mval">{{ stats.best_r }} / {{ stats.worst_r }}</div></div>
+      <div class="metric"><div class="mlabel">Pending</div><div class="mval">{{ stats.pending }}</div></div>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>confidence bucket</th><th>trades</th><th>win rate</th><th>avg R</th></tr></thead>
+      <tbody>
+        {% for bucket, row in stats.by_confidence.items() %}
+        <tr><td>{{ bucket }}</td><td>{{ row.trades }}</td><td>{{ row.win_rate }}%</td><td>{{ row.avg_r }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <table class="tbl" style="margin-top:10px;">
+      <thead><tr><th>symbol</th><th>trades</th><th>avg R</th></tr></thead>
+      <tbody>
+        {% for sym, row in stats.by_symbol.items() %}
+        <tr><td><a href="/?symbol={{ sym }}">{{ sym }}</a></td><td>{{ row.trades }}</td><td>{{ row.avg_r }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Nothing evaluated yet. Each dashboard refresh writes a signal; after
+      {{ settings.journal_eval_after_candles }} candles the outcome is simulated — press
+      “settle open signals” to do it now.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <div class="group-head">
+      <h2>Weight calibration</h2>
+      <div class="group-actions"><span class="chip {{ 'ok' if calibration.mode == 'adaptive' else '' }}">mode: {{ calibration.mode }}</span></div>
+    </div>
+    {% if calibration.meta.active %}
+    <p class="muted tiny">{{ calibration.meta.samples }} evaluated signals · adjustments below are applied automatically while
+      <code>weight_mode = adaptive</code>.</p>
+    {% else %}
+    <p class="muted tiny">{{ calibration.meta.note|default('not enough data yet') }}</p>
+    {% endif %}
+    <table class="tbl">
+      <thead><tr><th>component</th><th>base weight</th><th>multiplier</th><th>effective</th><th>IC</th></tr></thead>
+      <tbody>
+        {% for name, weight in calibration.base_weights.items() %}
+        {% set row = calibration.components.get(name, {}) %}
+        <tr>
+          <td>{{ name }}</td>
+          <td>{{ weight }}</td>
+          <td>{{ calibration.multipliers.get(name, 1.0) }}</td>
+          <td>{{ calibration.effective_weights.get(name, weight) }}</td>
+          <td class="{{ 'win' if (row.ic or 0) > 0.1 else 'loss' if (row.ic or 0) < -0.1 else '' }}">{{ row.ic|default('—') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <a class="mini-btn" href="/settings#scoring">edit weights</a>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Latest signals</h2>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>time</th><th>symbol</th><th>signal</th><th>conf</th><th>price</th><th>outcome</th><th>R</th><th>components</th></tr></thead>
+    <tbody>
+      {% for record in records %}
+      <tr>
+        <td class="muted">{{ record.ts[11:19] if record.ts else '' }}</td>
+        <td>{{ record.symbol }}</td>
+        <td class="{{ 'win' if record.signal == 'LONG' else 'loss' if record.signal == 'SHORT' else 'muted' }}">{{ record.signal }}</td>
+        <td>{{ record.confidence }}</td>
+        <td>{{ "{:,.4g}".format(record.price) if record.price else '—' }}</td>
+        <td>{% if record.outcome is none %}<span class="muted">open</span>{% elif record.outcome > 0 %}TP{% elif record.outcome < 0 %}SL{% else %}—{% endif %}</td>
+        <td class="{{ 'win' if (record.outcome_r or 0) > 0 else 'loss' if (record.outcome_r or 0) < 0 else '' }}">{{ record.outcome_r if record.outcome_r is not none else '' }}</td>
+        <td class="muted tiny">
+          {% for name, value in (record.components or {}).items() %}{% if value %}{{ name[:3] }} {{ '%+.0f'|format(value) }} {% endif %}{% endfor %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted">journal is empty</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("evaluateNow")?.addEventListener("click", async () => {
+  const { toast, api } = window.aiTrader;
+  try {
+    const data = await api.post("/api/journal/evaluate", {});
+    toast(`settled ${data.evaluated} · pending ${data.pending}`, "ok");
+    setTimeout(() => location.reload(), 800);
+  } catch (error) { toast(error.message, "error"); }
+});
+</script>
+{% endblock %}

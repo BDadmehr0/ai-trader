@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 
 
@@ -225,7 +227,83 @@ def calculate_metrics(
 
     ]
 
+    average_pnl = (
+
+        float(np.mean(pnls))
+
+        if pnls
+
+        else 0.0
+
+    )
+
+    holding = [
+
+        int(trade.holding_candles or 0)
+
+        for trade in trades
+
+    ]
+
+    exits: dict = {}
+
+    for trade in trades:
+
+        reason = str(trade.exit_reason or "UNKNOWN")
+
+        exits[reason] = exits.get(reason, 0) + 1
+
+    equity_arr = np.array(equity_curve, dtype=float)
+
+    downside = returns[returns < 0] if len(returns) else returns
+
+    sortino = (
+
+        float(returns.mean() / downside.std() * math.sqrt(len(returns)))
+
+        if len(returns) > 1 and len(downside) > 0 and downside.std() > 0
+
+        else 0.0
+
+    )
+
+    net_profit = final_balance - initial_balance
+
+    recovery_factor = (
+
+        net_profit / max(1e-9, float(initial_balance * max_drawdown / 100.0))
+
+        if max_drawdown
+
+        else 0.0
+
+    )
+
     return {
+
+        "average_pnl":
+
+            average_pnl,
+
+        "avg_holding_candles":
+
+            float(np.mean(holding)) if holding else 0.0,
+
+        "sortino":
+
+            sortino,
+
+        "recovery_factor":
+
+            recovery_factor,
+
+        "exit_reasons":
+
+            exits,
+
+        "net_profit":
+
+            net_profit,
 
         "total_trades":
             total_trades,

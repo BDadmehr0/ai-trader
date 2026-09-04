@@ -1,7 +1,6 @@
 ccxt
 pandas
 numpy
-ta
 rich
 python-dotenv
 matplotlib

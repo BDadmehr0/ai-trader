@@ -1,91 +1,67 @@
+"""
+Multi-timeframe preparation.
+
+The higher frames are aligned onto the base frame with `merge_asof(direction=
+"backward")`, i.e. every base candle only ever sees HTF candles that had
+*already closed* — that is what keeps a backtest honest (no lookahead).
+
+Columns get generic `_mid` / `_high` suffixes so the strategy works whatever
+timeframes the user configured (15m/1h/4h, 5m/30m/2h, ...).
+"""
+
 import pandas as pd
 
 
-def prepare_mtf_data(
-    df_15m,
-    df_1h,
-    df_4h,
-):
-
-    df_15m = df_15m.copy()
-    df_1h = df_1h.copy()
-    df_4h = df_4h.copy()
-
-    # --------------------------------
-    # IMPORTANT
-    # Remove current incomplete candle
-    # --------------------------------
-
-    df_15m = df_15m.iloc[:-1].copy()
-
-    df_1h = df_1h.iloc[:-1].copy()
-
-    df_4h = df_4h.iloc[:-1].copy()
-
-    # --------------------------------
-    # Sort
-    # --------------------------------
-
-    df_15m = df_15m.sort_values(
-        "timestamp"
-    )
-
-    df_1h = df_1h.sort_values(
-        "timestamp"
-    )
-
-    df_4h = df_4h.sort_values(
-        "timestamp"
-    )
-
-    # --------------------------------
-    # Rename higher TF columns
-    # --------------------------------
-
-    df_1h = df_1h.rename(
+def _suffix(frame: pd.DataFrame, suffix: str, skip=("timestamp",)) -> pd.DataFrame:
+    return frame.rename(
         columns={
-            column: f"{column}_1h"
-            for column in df_1h.columns
-            if column != "timestamp"
+            column: f"{column}_{suffix}"
+            for column in frame.columns
+            if column not in skip
         }
     )
 
-    df_4h = df_4h.rename(
-        columns={
-            column: f"{column}_4h"
-            for column in df_4h.columns
-            if column != "timestamp"
-        }
-    )
 
-    # --------------------------------
-    # Merge 1H
-    # --------------------------------
+def prepare_mtf_data(df_base, df_mid, df_high, drop_open_candle=True) -> pd.DataFrame:
+    """Merge three indicator frames onto the base timeframe."""
+    if df_base is None or df_mid is None or df_high is None:
+        raise ValueError("prepare_mtf_data needs three frames (base, mid, higher)")
 
-    merged = pd.merge_asof(
-        df_15m,
-        df_1h,
-        on="timestamp",
-        direction="backward",
-    )
+    base = df_base.copy()
+    mid = df_mid.copy()
+    high = df_high.copy()
 
-    # --------------------------------
-    # Merge 4H
-    # --------------------------------
+    if drop_open_candle:
+        # The newest candle of every frame is still forming — exclude it.
+        base = base.iloc[:-1].copy()
+        mid = mid.iloc[:-1].copy()
+        high = high.iloc[:-1].copy()
 
-    merged = pd.merge_asof(
-        merged,
-        df_4h,
-        on="timestamp",
-        direction="backward",
-    )
+    base = base.sort_values("timestamp").reset_index(drop=True)
+    mid = _suffix(mid.sort_values("timestamp"), "mid")
+    high = _suffix(high.sort_values("timestamp"), "high")
 
-    # --------------------------------
-    # Remove missing
-    # --------------------------------
+    for frame in (mid, high):
+        if "timestamp" in frame.columns:
+            frame[["timestamp"]] = frame[["timestamp"]].apply(
+                pd.to_datetime, utc=True
+            )
+    base[["timestamp"]] = base[["timestamp"]].apply(pd.to_datetime, utc=True)
 
-    merged = merged.dropna()
+    merged = pd.merge_asof(base, mid, on="timestamp", direction="backward")
+    merged = pd.merge_asof(merged, high, on="timestamp", direction="backward")
 
-    return merged.reset_index(
-        drop=True
-    )
+    required = [column for column in merged.columns if column.endswith(("_mid", "_high"))]
+    merged = merged.dropna(subset=required)
+
+    return merged.reset_index(drop=True)
+
+
+def mtf_summary(df: pd.DataFrame) -> dict:
+    """Row counts used by the backtest report / UI."""
+    return {
+        "rows": int(len(df)),
+        "start": str(df["timestamp"].iloc[0]) if len(df) else None,
+        "end": str(df["timestamp"].iloc[-1]) if len(df) else None,
+        "columns": int(df.shape[1]),
+    }

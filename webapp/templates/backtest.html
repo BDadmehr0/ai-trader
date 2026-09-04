@@ -1,68 +1,121 @@
 {% extends "base.html" %}
-{% block title %}بک‌تست — AI BTC Trader{% endblock %}
+{% block title %}Backtest — AI Trader{% endblock %}
 
 {% block content %}
+{% set metrics = result.metrics if result and result.metrics else {} %}
 <div class="status-line">
-  <span id="dataMode">
-    {% if live %}
-      <span class="badge live">داده زنده</span>
-    {% else %}
-      <span class="badge demo">داده نمایشی (آفلاین)</span>
-    {% endif %}
+  <span>Backtest · {{ result.symbol if result else symbol }} · source {{ result.source if result else '—' }}
+    {% if result and not result.live %}<span class="chip warn">non-live data</span>{% endif %}
+    {% if result %}· {{ result.duration_ms }} ms · {{ result.coverage.rows }} merged candles{% endif %}
+  </span>
+  <span class="status-actions">
+    <a class="mini-btn" href="/backtest?symbol={{ symbol }}&run=0">clear</a>
+    <a class="mini-btn" href="/settings#backtest">tune parameters</a>
+    <a class="mini-btn" href="/journal">signal journal</a>
   </span>
 </div>
 
+{% if result and result.ok == false %}
+<div class="banner error">backtest failed: {{ result.error }}</div>
+{% endif %}
+
 <section class="card">
-  <h2>نتیجه بک‌تست</h2>
+  <div class="group-head">
+    <h2>Performance <span class="muted">· عملکرد</span></h2>
+    <div class="group-actions">
+      <button class="btn small" id="btRun">re-run with current settings</button>
+      <button class="btn small" id="btOptimize">optimize (walk-forward)</button>
+    </div>
+  </div>
+
   {% if metrics %}
   <div class="metric-grid">
-    <div class="metric"><div class="m-label">تعداد معاملات</div><div class="m-val">{{ metrics.total_trades }}</div></div>
-    <div class="metric"><div class="m-label">بردها</div><div class="m-val win">{{ metrics.wins }}</div></div>
-    <div class="metric"><div class="m-label">باخت‌ها</div><div class="m-val loss">{{ metrics.losses }}</div></div>
-    <div class="metric"><div class="m-label">نرخ برد</div><div class="m-val">{{ "%.2f"|format(metrics.win_rate) }}%</div></div>
-    <div class="metric"><div class="m-label">فاکتور سود</div><div class="m-val">{{ "%.2f"|format(metrics.profit_factor) }}</div></div>
-    <div class="metric"><div class="m-label">بازده کل</div><div class="m-val">{{ "%.2f"|format(metrics.total_return) }}%</div></div>
-    <div class="metric"><div class="m-label">حداکثر افت</div><div class="m-val loss">{{ "%.2f"|format(metrics.max_drawdown) }}%</div></div>
-    <div class="metric"><div class="m-label">موجودی نهایی</div><div class="m-val">{{ "${:,.0f}".format(metrics.final_balance) }}</div></div>
+    <div class="metric"><div class="mlabel">Trades</div><div class="mval">{{ metrics.total_trades }}</div></div>
+    <div class="metric"><div class="mlabel">Win rate</div><div class="mval {% if metrics.win_rate >= 50 %}win{% else %}loss{% endif %}">{{ "%.1f"|format(metrics.win_rate) }}%</div></div>
+    <div class="metric"><div class="mlabel">Profit factor</div><div class="mval {{ 'win' if metrics.profit_factor >= 1 else 'loss' }}">{{ "%.2f"|format(metrics.profit_factor) }}</div></div>
+    <div class="metric"><div class="mlabel">Total return</div><div class="mval {{ 'win' if metrics.total_return > 0 else 'loss' }}">{{ "%+.2f"|format(metrics.total_return) }}%</div></div>
+    <div class="metric"><div class="mlabel">Max drawdown</div><div class="mval loss">{{ "%.2f"|format(metrics.max_drawdown) }}%</div></div>
+    <div class="metric"><div class="mlabel">Sharpe</div><div class="mval">{{ "%.2f"|format(metrics.sharpe) }}</div></div>
+    <div class="metric"><div class="mlabel">Expectancy</div><div class="mval">{{ "%.2f"|format(metrics.expectancy) }}</div></div>
+    <div class="metric"><div class="mlabel">Final balance</div><div class="mval">{{ "{:,.0f}".format(metrics.final_balance) }}</div></div>
   </div>
   {% else %}
-    <p class="muted">هیچ معامله‌ای یافت نشد.</p>
+  <p class="muted">No trades produced by the current configuration — try lowering <code>entry_threshold</code>,
+    relaxing <code>min_volume_ratio</code>, or giving the backtest more candles.</p>
   {% endif %}
 </section>
 
-{% if trades %}
+{% if result and result.equity %}
 <section class="card">
-  <h2>معاملات ({{ trades|length }})</h2>
-  <div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>جهت</th><th>ورود</th><th>خروج</th><th>قیمت ورود</th>
-        <th>قیمت خروج</th><th>سود/ضرر</th><th>دلیل خروج</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for t in trades[:100] %}
-      <tr>
-        <td>
-          <span class="trend trend-{{ 'bullish' if t.direction == 'LONG' else 'bearish' }}">
-            {{ 'خرید' if t.direction == 'LONG' else 'فروش' }}
-          </span>
-        </td>
-        <td>{{ t.entry_time }}</td>
-        <td>{{ t.exit_time }}</td>
-        <td>{{ "{:,.0f}".format(t.entry_price) }}</td>
-        <td>{{ "{:,.0f}".format(t.exit_price) }}</td>
-        <td class="{{ 'win' if t.net_pnl >= 0 else 'loss' }}">{{ "%+.2f"|format(t.net_pnl) }}</td>
-        <td>{{ t.exit_reason }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  </div>
-  {% if trades|length > 100 %}
-    <p class="muted">نمایش ۱۰۰ مورد از {{ trades|length }} معامله.</p>
-  {% endif %}
+  <h2>Equity curve</h2>
+  <div id="equityChart" class="equity-box"></div>
+  <div class="muted tiny">starting balance {{ "{:,.0f}".format(result.initial_balance) }} · {{ result.equity|length }} points</div>
 </section>
 {% endif %}
+
+<div class="grid2">
+  <section class="card">
+    <h2>Exit reasons / trades</h2>
+    {% if metrics.exit_reasons %}
+    <div class="chips">
+      {% for reason, count in metrics.exit_reasons.items() %}<span class="chip">{{ reason }} · {{ count }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    {% if result and result.trades %}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>entry</th><th>exit</th><th>dir</th><th>in</th><th>out</th><th>net PnL</th><th>margin %</th><th>why</th></tr></thead>
+        <tbody>
+          {% for trade in result.trades[:60] %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td class="muted">{{ trade.entry_time[5:16] }}</td>
+            <td class="muted">{{ trade.exit_time[5:16] }}</td>
+            <td>{{ trade.direction }}</td>
+            <td>{{ "{:,.6g}".format(trade.entry_price) }}</td>
+            <td>{{ "{:,.6g}".format(trade.exit_price) }}</td>
+            <td class="{{ 'win' if trade.net_pnl > 0 else 'loss' }}">{{ "%+.2f"|format(trade.net_pnl) }}</td>
+            <td>{{ "%+.2f"|format(trade.return_on_margin) }}%</td>
+            <td class="muted">{{ trade.exit_reason }} · {{ trade.holding_candles }}c</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif result %}
+    <p class="muted tiny">no trades to list</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Config used by this run</h2>
+    <table class="tbl">
+      {% for key, value in (result.params if result else {}).items() %}
+      <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+      {% endfor %}
+      {% if result %}
+      <tr><td>timeframes</td><td>{{ result.coverage.timeframes|join(' / ') }}</td></tr>
+      <tr><td>window</td><td class="muted">{{ result.coverage.start }} → {{ result.coverage.end }}</td></tr>
+      {% endif %}
+    </table>
+    <p class="muted tiny">
+      تغییر این مقادیر در صفحه‌ی تنظیمات، بلافاصله روی همین بک‌تست و روی سیگنال زنده اثر می‌کند — پس یک تست
+      واقعی از «کانفیگ خودت» است.
+    </p>
+  </section>
+</div>
+
+<section class="card" id="optimizerCard">
+  <div class="group-head">
+    <h2>Optimizer <span class="muted">· بهینه‌سازی پارامتر</span></h2>
+    <div class="group-actions"><span class="muted tiny" id="optimizeStatus">idle</span></div>
+  </div>
+  <div id="optimizeResults" class="probe-slot"><div class="muted tiny">press “optimize” to search parameters on this data (train/test split prevents overfitting).</div></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+{% if result and result.equity %}<script>window.AI_TRADER_EQUITY = {{ result.equity | tojson }};</script>{% endif %}
+<script src="{{ url_for('static', filename='backtest.js') }}"></script>
 {% endblock %}

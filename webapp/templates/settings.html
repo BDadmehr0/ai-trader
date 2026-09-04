@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Settings — AI Trader{% endblock %}
+
+{% macro control(item) %}
+  {% set key = item.key %}
+  {% if item.type == "bool" %}
+    <label class="switch">
+      <input type="checkbox" data-key="{{ key }}" {% if item.value %}checked{% endif %}>
+      <span class="switch-ui"></span>
+      <span class="switch-text">{{ "on" if item.value else "off" }}</span>
+    </label>
+  {% elif item.type == "enum" %}
+    <select data-key="{{ key }}">
+      {% for choice in item.choices %}
+      <option value="{{ choice }}" {% if item.value == choice %}selected{% endif %}>{{ choice }}</option>
+      {% endfor %}
+    </select>
+  {% elif item.type == "list" %}
+    <textarea data-key="{{ key }}" rows="5" spellcheck="false">{{ item.widget }}</textarea>
+  {% elif item.type == "dict" %}
+    <textarea data-key="{{ key }}" rows="5" spellcheck="false" class="mono">{{ item.widget }}</textarea>
+  {% elif item.type in ("int", "float") %}
+    <div class="numrow">
+      <input type="number" data-key="{{ key }}" value="{{ item.value }}"
+             step="{{ item.step or ('1' if item.type == 'int' else 'any') }}"
+             {% if item.min is not none %}min="{{ item.min }}"{% endif %}
+             {% if item.max is not none %}max="{{ item.max }}"{% endif %}>
+      {% if item.min is not none and item.max is not none and item.max <= 200 %}
+      <input type="range" data-key="{{ key }}-range" data-pair="{{ key }}" value="{{ item.value }}"
+             step="{{ item.step or 1 }}" min="{{ item.min }}" max="{{ item.max }}">
+      {% endif %}
+      <button type="button" class="mini-btn reset-one" data-reset="{{ key }}" title="reset to default">{{ item.default }}</button>
+    </div>
+  {% elif item.type == "text" %}
+    <textarea data-key="{{ key }}" rows="4" spellcheck="false">{{ item.value }}</textarea>
+  {% elif item.secret %}
+    <div class="secretrow">
+      <input type="password" data-key="{{ key }}" value="{{ item.value }}" spellcheck="false" autocomplete="off">
+      <button type="button" class="mini-btn reveal">show</button>
+    </div>
+  {% else %}
+    <input type="text" data-key="{{ key }}" value="{{ item.value }}" spellcheck="false" autocomplete="off">
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="settings-head">
+  <div>
+    <h1>Settings <span class="muted">· تنظیمات</span></h1>
+    <p class="muted">
+      saved to <code>{{ schema.file }}</code>
+      {% if schema.file_exists %}
+      <span class="chip ok">file present</span>
+      {% else %}
+      <span class="chip">using built-in defaults</span>
+      {% endif %}
+      — every field is live: the next analysis run uses it immediately.
+    </p>
+  </div>
+  <div class="settings-actions">
+    <span id="changedCount" class="chip">no changes</span>
+    <button id="saveButton" class="btn primary" disabled>Save (Ctrl+S)</button>
+    <button id="revertButton" class="btn">Revert</button>
+    <button id="exportButton" class="btn">Export</button>
+    <button id="resetButton" class="btn danger">Reset all</button>
+  </div>
+</div>
+
+<input type="hidden" id="probeSymbol" value="{{ default_symbol }}">
+
+{% if schema.file_error %}<div class="banner error">{{ schema.file_error }}</div>{% endif %}
+{% if schema.errors %}
+<div class="banner warn">settings rejected: {% for key, message in schema.errors.items() %}<b>{{ key }}</b> {{ message }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+{% endif %}
+
+<div class="tabs">
+  {% for group in schema.groups %}
+  <a class="tab" href="#{{ group.id }}" data-tab="{{ group.id }}">
+    <span class="tab-icon">{{ group.icon }}</span>
+    <span class="tab-label">{{ group.label }}</span>
+    <span class="tab-fa">{{ group.label_fa }}</span>
+  </a>
+  {% endfor %}
+</div>
+
+<form id="settingsForm" onsubmit="return false;">
+
+  {% for group in schema.groups %}
+  <section class="card group-panel" id="group-{{ group.id }}">
+    <div class="group-head">
+      <h2>{{ group.icon }} {{ group.label }} <span class="muted">{{ group.label_fa }}</span></h2>
+      <div class="group-actions">
+        {% if group.id == "data" %}
+        <button type="button" class="mini-btn" data-probe="data">test data source</button>
+        {% elif group.id == "news" %}
+        <button type="button" class="mini-btn" data-probe="llm">test model</button>
+        <button type="button" class="mini-btn" data-probe="news">fetch news now</button>
+        {% elif group.id == "derivatives" %}
+        <button type="button" class="mini-btn" data-probe="derivatives">fetch positioning now</button>
+        {% elif group.id == "scoring" %}
+        <button type="button" class="mini-btn" id="calibrationBox">calibration from journal</button>
+        {% elif group.id == "backtest" %}
+        <button type="button" class="mini-btn" id="optimizeRun">run optimizer</button>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if group.id == "data" %}
+    <div class="panel-extra">
+      <div class="upload-row">
+        <form id="uploadForm" enctype="multipart/form-data">
+          <input type="file" name="file" accept=".csv,text/csv">
+          <input type="text" name="timeframe" placeholder="native tf (auto)" size="6">
+          <label class="inline-check"><input type="checkbox" name="activate" checked> use it now</label>
+          <button class="btn small" type="submit">upload</button>
+        </form>
+        <button class="btn small" type="button" id="csvClear">stop using CSV</button>
+      </div>
+      <div id="csvFiles" class="csv-files"></div>
+      <div class="probe-slot" data-result="derivatives"></div>
+      <p class="muted tiny">
+        columns accepted: <code>timestamp/date, open, high, low, close, volume</code> — order and spelling are sniffed.
+        تحلیل، بک‌تست و بهینه‌ساز همه روی همین فایل اجرا می‌شوند.
+      </p>
+      <div data-result="data" class="probe-slot"></div>
+    </div>
+    {% endif %}
+
+    {% if group.id == "news" %}
+    <div class="panel-extra">
+      <div class="ai-steps">
+        <div class="step"><b>1</b> install ollama → <code>curl -fsSL https://ollama.com/install.sh | sh</code></div>
+        <div class="step"><b>2</b> pull a small instruct model → <code>ollama pull llama3.1</code> (یا <code>qwen2.5:3b</code>)</div>
+        <div class="step"><b>3</b> engine = <b>ollama</b>، مدل را همین‌جا بنویس، «test model» را بزن</div>
+        <div class="step"><b>4</b> بدون اینترنت/مدل، موتور آفلاین <b>lexicon</b> خودش امتیاز می‌دهد (fallback خودکار)</div>
+      </div>
+      <div class="probe-slot" data-result="llm"></div>
+      <div class="probe-slot" data-result="news"></div>
+    </div>
+    {% endif %}
+
+    {% if group.id == "scoring" %}
+    <div class="panel-extra">
+      <div id="weightBars" class="weight-bars"></div>
+      <div id="calibrationDetails" class="probe-slot"></div>
+    </div>
+    {% endif %}
+
+    {% if group.id == "backtest" %}
+    <div class="panel-extra">
+      <div id="optimizeResults" class="probe-slot"></div>
+    </div>
+    {% endif %}
+
+    <div class="fields">
+      {% for item in group["items"] %}
+      <div class="field type-{{ item.type }}{% if item.optimizer %} optimizable{% endif %}" data-field="{{ item.key }}">
+        <label class="flabel" title="{{ item.key }}">
+          {{ item.label }}
+          {% if item.optimizer %}<span class="opt-tag" title="optimizer can search this">∿</span>{% endif %}
+          {% if not item.is_default %}<span class="mod-tag" title="different from default">modified</span>{% endif %}
+        </label>
+        {{ control(item) }}
+        <div class="fhelp">
+          {% if ui.show_fa and item.help %}<span class="fa">{{ item.help }}</span>{% endif %}
+          <span class="meta">key <code>{{ item.key }}</code> · default <code>{{ item.default }}</code></span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <section class="card group-panel" id="group-import">
+    <div class="group-head"><h2>⤓ Import a config file</h2></div>
+    <div class="fields one">
+      <div class="field type-text">
+        <label class="flabel">paste exported JSON</label>
+        <textarea id="importBox" rows="8" class="mono" placeholder='{"entry_threshold": 25}'></textarea>
+        <div class="fhelp"><span class="fa">فقط کلیدهایی که می‌شناسد اعمال می‌شوند؛ بقیه نادیده گرفته می‌شوند.</span></div>
+        <button type="button" class="btn small" id="importButton">import</button>
+      </div>
+    </div>
+  </section>
+</form>
+
+<script id="initialValues" type="application/json">{{ schema.widgets | tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='settings.js') }}"></script>
+{% endblock %}
