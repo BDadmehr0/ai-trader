@@ -3,3 +3,16 @@ __pycache__/
 *.pyc
 .env
 data/cache/
+
+# local settings, uploaded datasets and logs (never commit user data)
+data/settings.json
+data/uploads/
+data/logs/
+data/journal/
+*.jsonl
+.pytest_cache/
+.ruff_cache/
+mypy_cache/
+*.egg-info/
+dist/
+build/

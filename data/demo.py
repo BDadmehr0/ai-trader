@@ -225,11 +225,45 @@ def is_demo_data_available(symbol="BTC/USDT"):
         return False
 
 
+def _timeframe_minutes(timeframe):
+    from data.csv_source import timeframe_minutes
+
+    return timeframe_minutes(timeframe)
+
+
 def load_demo(timeframe, symbol="BTC/USDT"):
-    """Load a demo frame for a given timeframe and symbol."""
+    """Load a demo frame for any timeframe / symbol pair.
+
+    Coarser timeframes are resampled from the 15m base so the whole picture
+    stays consistent; finer ones are generated directly. Anything we build is
+    cached as CSV, so a symbol is generated once per run.
+    """
     ensure_demo_data(symbol=symbol)
+
     slug = _symbol_slug(symbol)
     path = CACHE_DIR / f"{slug}_{timeframe}.csv"
+
+    if not path.exists():
+        minutes = _timeframe_minutes(timeframe)
+        if minutes % 15 == 0 and minutes > 15:
+            base = pd.read_csv(CACHE_DIR / f"{slug}_15m.csv")
+            base["timestamp"] = pd.to_datetime(base["timestamp"], utc=True)
+            from data.csv_source import resample
+
+            frame = resample(base, timeframe, source_timeframe="15m")
+        else:
+            base_price = _base_price(slug.split("-")[0])
+            frame = _generate_base(minutes, base_price, _seed(slug)).tail(_CANDLES).reset_index(drop=True)
+            frame = frame[frame["timestamp"].dt.floor(f"{minutes}min") == frame["timestamp"]]
+
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"], utc=True)
+        frame.to_csv(path, index=False)
+
     df = pd.read_csv(path)
     df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
     return df
+
+
+def supported_timeframes(symbol="BTC/USDT", available=("1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d")):
+    """Every timeframe the demo generator can produce."""
+    return tuple(available)

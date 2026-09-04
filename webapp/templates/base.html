@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="{{ ui.language if ui else 'fa' }}" dir="rtl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,8 +14,8 @@
     <div class="selector" id="symbolSelector">
       <div class="sel-icon" id="selIcon">₿</div>
       <div class="sel-info">
-        <div class="sel-name" id="selName">{{ symbol|default('BTC') }}</div>
-        <div class="sel-sub" id="selSub">{{ symbol|default('BTC/USDT') }}</div>
+        <div class="sel-name" id="selName">{{ symbol|default('BTC') if symbol else 'BTC' }}</div>
+        <div class="sel-sub" id="selSub">{{ report.symbol if report else default_symbol }}</div>
       </div>
       <span class="sel-arrow">▼</span>
 
@@ -31,14 +31,25 @@
     <!-- Navigation -->
     <nav class="nav">
       <a href="/" class="{{ 'active' if request.path == '/' else '' }}">Signal</a>
-      <a href="/backtest" class="{{ 'active' if request.path == '/backtest' else '' }}">Backtest</a>
+      <a href="/backtest" class="{{ 'active' if request.path.startswith('/backtest') else '' }}">Backtest</a>
+      <a href="/journal" class="{{ 'active' if request.path.startswith('/journal') else '' }}">Journal</a>
+      <a href="/settings" class="{{ 'active' if request.path.startswith('/settings') else '' }}">Settings</a>
     </nav>
 
     <!-- Right section -->
     <div class="right">
-      <span class="badge {% if report and report.live %}live{% else %}demo{% endif %}" id="dataMode">
-        {% if report and report.live %}LIVE{% else %}DEMO{% endif %}
+      {% if report %}
+      <span class="badge {{ 'live' if report.data and report.data.live else 'demo' }}" id="dataMode"
+            title="data source: {{ report.data.used if report.data else 'unknown' }}">
+        {% if report.data and report.data.live %}LIVE{% elif report.data and report.data.used == 'csv' %}CSV{% else %}DEMO{% endif %}
       </span>
+      <span class="badge engine-{{ report.news.provider if report.news else 'off' }}" id="newsBadge"
+            title="{{ report.news.summary if report.news and report.news.available else (report.news.status if report.news else 'news off') }}">
+        {% if report.news and report.news.available %}AI: {{ report.news.provider }}{% else %}AI: off{% endif %}
+      </span>
+      {% else %}
+      <span class="badge demo" id="dataMode">—</span>
+      {% endif %}
     </div>
   </header>
 
@@ -48,11 +59,15 @@
   </main>
 
   <footer class="footer">
-    AI Trading Dashboard — Technical analysis only, not financial advice.
+    AI Trader — تحلیل تکنیکال + اخبار؛ توصیه‌ی مالی نیست.
+    <span class="foot-config">config: {{ settings_meta.file if settings_meta else '' }}</span>
   </footer>
+
+  <div id="toast" class="toast"></div>
 
   <script>window.AI_TRADER_COINS = {{ coins | tojson }};</script>
   <script src="{{ url_for('static', filename='coinswitcher.js') }}"></script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

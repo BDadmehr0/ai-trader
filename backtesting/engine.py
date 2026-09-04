@@ -1,4 +1,5 @@
 import math
+import threading
 
 from analysis.strategy import (
     generate_signal,
@@ -8,32 +9,56 @@ from backtesting.models import (
     Trade,
 )
 
-from config.settings import (
-    RISK_PER_TRADE,
-    ATR_STOP_MULTIPLIER,
-    ATR_TP_MULTIPLIER,
-    LEVERAGE,
-    TAKER_FEE,
-    SLIPPAGE,
-    FUNDING_RATE,
-    FUNDING_INTERVAL_HOURS,
-    MAINTENANCE_MARGIN,
-    MAX_HOLDING_CANDLES,
-    COOLDOWN_CANDLES,
-    ENABLE_BREAK_EVEN,
-    BREAK_EVEN_R,
-    BREAK_EVEN_OFFSET,
-    ENABLE_TRAILING_STOP,
-    TRAILING_ATR_MULTIPLIER,
-)
+from config.store import get_settings
+
+# Names the engine body uses (kept as module globals so the algorithm below
+# stays readable). They are refreshed from the live settings store at the start
+# of every run(), which is what lets the /settings page and the optimizer change
+# risk parameters without restarting anything.
+_SETTINGS_KEYS = {
+    "RISK_PER_TRADE": "risk_per_trade",
+    "ATR_STOP_MULTIPLIER": "atr_stop_multiplier",
+    "ATR_TP_MULTIPLIER": "atr_tp_multiplier",
+    "LEVERAGE": "leverage",
+    "TAKER_FEE": "taker_fee",
+    "SLIPPAGE": "slippage",
+    "FUNDING_RATE": "funding_rate",
+    "FUNDING_INTERVAL_HOURS": "funding_interval_hours",
+    "MAINTENANCE_MARGIN": "maintenance_margin",
+    "MAX_HOLDING_CANDLES": "max_holding_candles",
+    "COOLDOWN_CANDLES": "cooldown_candles",
+    "ENABLE_BREAK_EVEN": "enable_break_even",
+    "BREAK_EVEN_R": "break_even_r",
+    "BREAK_EVEN_OFFSET": "break_even_offset",
+    "ENABLE_TRAILING_STOP": "enable_trailing_stop",
+    "TRAILING_ATR_MULTIPLIER": "trailing_atr_multiplier",
+    "MIN_VOLUME_RATIO": "min_volume_ratio",
+    "PULLBACK_DISTANCE": "pullback_distance",
+}
+
+#: the module globals above are shared, so runs are serialised
+_RUN_LOCK = threading.Lock()
+
+
+def _apply_settings(settings):
+    globals().update({name: settings.get(key) for name, key in _SETTINGS_KEYS.items()})
 
 
 class BacktestEngine:
 
     def __init__(
         self,
-        initial_balance,
+        initial_balance=None,
+        settings=None,
     ):
+
+        self.settings = settings or get_settings()
+
+        initial_balance = (
+            initial_balance
+            if initial_balance is not None
+            else float(self.settings.get("initial_balance", 10000.0))
+        )
 
         self.initial_balance = (
             initial_balance
@@ -54,6 +79,16 @@ class BacktestEngine:
     # =================================
 
     def run(
+        self,
+        df,
+    ):
+        """Run the simulation with the effective settings applied."""
+        settings = self.settings or get_settings()
+        with _RUN_LOCK:
+            _apply_settings(settings)
+            return self._run_impl(df)
+
+    def _run_impl(
         self,
         df,
     ):
@@ -241,6 +276,7 @@ class BacktestEngine:
             signal = generate_signal(
                 previous,
                 current,
+                self.settings or get_settings(),
             )
 
             if signal == "WAIT":
@@ -288,20 +324,10 @@ class BacktestEngine:
             row["atr"]
         )
 
-        stop_distance = (
-
-            atr
-
-            * ATR_STOP_MULTIPLIER
-
-        )
-
-        tp_distance = (
-
-            atr
-
-            * ATR_TP_MULTIPLIER
-
+        stop_distance, tp_distance = self._distances(
+            row,
+            direction,
+            atr,
         )
 
         # -------------------------
@@ -400,11 +426,27 @@ class BacktestEngine:
         # Leverage
         # -------------------------
 
+        leverage = max(1.0, float(LEVERAGE))
+
+        max_notional = (
+
+            self.balance
+
+            * leverage
+
+        )
+
+        if notional > max_notional > 0:
+
+            position_size = max_notional / entry_price
+
+            notional = max_notional
+
         margin_used = (
 
             notional
 
-            / LEVERAGE
+            / leverage
 
         )
 
@@ -460,6 +502,71 @@ class BacktestEngine:
                 False,
 
         }
+
+    # =================================
+    # Stop / Target geometry
+    # =================================
+
+    def _distances(
+        self,
+        row,
+        direction,
+        atr,
+    ):
+        """Stop and target distances honouring stop_mode / target_mode."""
+
+        settings = self.settings or get_settings()
+
+        stop_distance = max(
+            1e-12,
+            atr * float(settings.get("atr_stop_multiplier", ATR_STOP_MULTIPLIER)),
+        )
+
+        ref = float(row["close"])
+        mode = str(settings.get("stop_mode", "atr"))
+
+        if mode in ("structure", "hybrid"):
+
+            key = "dc_lower" if direction == "LONG" else "dc_upper"
+            level = _read(row, key)
+
+            if level:
+
+                buffer = float(settings.get("stop_structure_buffer", 0.25)) * atr
+
+                structure = (ref - level + buffer) if direction == "LONG" else (level - ref + buffer)
+
+                cap = 3.0 * atr if atr > 0 else ref * 0.06
+
+                if 0 < structure <= cap:
+
+                    stop_distance = (
+                        structure
+                        if mode == "structure"
+                        else max(stop_distance, structure)
+                    )
+
+        target_mode = str(settings.get("target_mode", "atr"))
+        tp_distance = atr * float(settings.get("atr_tp_multiplier", ATR_TP_MULTIPLIER))
+
+        if target_mode == "rr":
+
+            tp_distance = stop_distance * float(settings.get("tp2_r", 2.5))
+
+        elif target_mode == "structure":
+
+            key = "dc_upper" if direction == "LONG" else "dc_lower"
+            level = _read(row, key)
+
+            if level:
+
+                distance = (level - ref) if direction == "LONG" else (ref - level)
+
+                if distance >= stop_distance:
+
+                    tp_distance = distance
+
+        return stop_distance, tp_distance
 
     # =================================
     # Dynamic Stop
@@ -1179,3 +1286,14 @@ class BacktestEngine:
             + unrealized
 
         )
+
+
+def _read(row, key):
+    """Read an optional indicator column from a pandas row (NaN-safe)."""
+    try:
+        value = float(row[key])
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    if math.isnan(value):
+        return None
+    return value
