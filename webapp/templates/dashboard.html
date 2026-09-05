@@ -179,7 +179,7 @@
       <span class="chip">{{ (news.cache_state) }}{% if news.age_seconds %} · {{ (news.age_seconds / 60)|round(1) }}m{% endif %}</span>
     </div>
     <ul class="headlines">
-      {% for item in (news.items|default([]))[:6] %}
+      {% for item in (news.get("items")|default([]))[:6] %}
       <li class="h-{{ (item.polarity or 'NEUTRAL')|lower }}">
         <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.headline }}</a>
         <span class="hmeta">{{ item.source }}{% if item.age_hours is not none %} · {{ item.age_hours }}h{% endif %} · {{ "%+.2f"|format(item.score) }}{% if item.method %} · {{ item.method }}{% endif %}</span>
